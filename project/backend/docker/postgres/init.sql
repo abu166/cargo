@@ -1,0 +1,5 @@
+CREATE DATABASE auth_db;
+CREATE DATABASE shipments_db;
+CREATE DATABASE finance_db;
+CREATE DATABASE wms_db;
+CREATE DATABASE portal_db;

@@ -1,0 +1,781 @@
+{
+  "info": {
+    "name": "CargoTrans API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "auth_url", "value": "http://localhost:8001"},
+    {"key": "shipments_url", "value": "http://localhost:8002"},
+    {"key": "finance_url", "value": "http://localhost:8003"},
+    {"key": "wms_url", "value": "http://localhost:8004"},
+    {"key": "token", "value": ""},
+    {"key": "shipment_id", "value": ""},
+    {"key": "document_id", "value": ""},
+    {"key": "route_id", "value": ""},
+    {"key": "cell_id", "value": "1"}
+  ],
+  "item": [
+    {
+      "name": "Runner Flow (ordered)",
+      "item": [
+        {
+          "name": "01 - Login",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "url": "{{auth_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('login ok', () => pm.response.code === 200);",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('token', json.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Create shipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{shipments_url}}/shipments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"origin_station\": \"A\",\n  \"destination_station\": \"B\",\n  \"weight_kg\": 12.5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('shipment created', () => pm.response.code === 200);",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('shipment_id', json.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Update status to TARIFF_CALCULATED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{shipments_url}}/shipments/{{shipment_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"TARIFF_CALCULATED\"\n}"
+            }
+          }
+        },
+        {
+          "name": "04 - Update status to PAID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{shipments_url}}/shipments/{{shipment_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PAID\"\n}"
+            }
+          }
+        },
+        {
+          "name": "05 - Generate QR",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{shipments_url}}/shipments/{{shipment_id}}/qr"
+          }
+        },
+        {
+          "name": "06 - Generate documents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{shipments_url}}/documents/generate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"doc_types\": [\"LU-12\", \"LU-63\", \"WAYBILL\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (Array.isArray(json) && json.length) { pm.collectionVariables.set('document_id', json[0].id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Scan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{shipments_url}}/scan",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"scanned_by\": \"operator1\",\n  \"location\": \"Station A\"\n}"
+            }
+          }
+        },
+        {
+          "name": "08 - List WMS cells",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/cells"
+          }
+        },
+        {
+          "name": "09 - Open cell",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/cells/open?cell_id={{cell_id}}"
+          }
+        },
+        {
+          "name": "10 - Close cell",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/cells/close?cell_id={{cell_id}}"
+          }
+        },
+        {
+          "name": "11 - Assign shipment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/assign?cell_id={{cell_id}}&shipment_id={{shipment_id}}"
+          }
+        },
+        {
+          "name": "12 - Remove shipment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/remove?cell_id={{cell_id}}"
+          }
+        },
+        {
+          "name": "13 - Create measurement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/measurements",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"weight_kg\": 12.5,\n  \"length_cm\": 50,\n  \"width_cm\": 40,\n  \"height_cm\": 30\n}"
+            }
+          }
+        },
+        {
+          "name": "14 - Create route plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/routes/plan",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"origin_station\": \"A\",\n  \"destination_station\": \"B\",\n  \"wagons_count\": 2\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('route_id', json.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15 - Approve route plan",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/routes/{{route_id}}/approve"
+          }
+        },
+        {
+          "name": "16 - Transport load",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/transport/load",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        },
+        {
+          "name": "17 - Transport unload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/transport/unload",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        },
+        {
+          "name": "18 - Transport arrive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/transport/arrive",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        },
+        {
+          "name": "19 - Delivery ready",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/delivery/ready",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        },
+        {
+          "name": "20 - Delivery confirm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/delivery/confirm",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        },
+        {
+          "name": "21 - Get shipment",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{shipments_url}}/shipments/{{shipment_id}}"
+          }
+        },
+        {
+          "name": "22 - Get document",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{shipments_url}}/documents/{{document_id}}"
+          }
+        },
+        {
+          "name": "23 - Audit logs",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{auth_url}}/audit/logs"
+          }
+        },
+        {
+          "name": "24 - Health checks",
+          "request": {
+            "method": "GET",
+            "url": "{{auth_url}}/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth & Users",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "url": "{{auth_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('token', json.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{auth_url}}/auth/me"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{auth_url}}/auth/logout"
+          }
+        },
+        {
+          "name": "Users - List",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{auth_url}}/users"
+          }
+        },
+        {
+          "name": "Users - Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{auth_url}}/users",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"agent1\",\n  \"password\": \"pass\",\n  \"full_name\": \"Agent\",\n  \"roles\": [\"AGENT\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Users - Update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{auth_url}}/users/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Admin Updated\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{auth_url}}/audit/logs"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shipments",
+      "item": [
+        {
+          "name": "Create shipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{shipments_url}}/shipments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"origin_station\": \"A\",\n  \"destination_station\": \"B\",\n  \"weight_kg\": 12.5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('shipment_id', json.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get shipment",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{shipments_url}}/shipments/{{shipment_id}}"
+          }
+        },
+        {
+          "name": "List shipments",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{shipments_url}}/shipments"
+          }
+        },
+        {
+          "name": "Cancel shipment",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{shipments_url}}/shipments/{{shipment_id}}/cancel"
+          }
+        }
+      ]
+    },
+    {
+      "name": "QR & Scanning",
+      "item": [
+        {
+          "name": "Generate QR",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{shipments_url}}/shipments/{{shipment_id}}/qr"
+          }
+        },
+        {
+          "name": "Scan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{shipments_url}}/scan",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"scanned_by\": \"operator1\",\n  \"location\": \"Station A\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Status",
+      "item": [
+        {
+          "name": "Update status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{shipments_url}}/shipments/{{shipment_id}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"TARIFF_CALCULATED\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "Generate documents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{shipments_url}}/documents/generate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"doc_types\": [\"LU-12\", \"LU-63\", \"WAYBILL\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (Array.isArray(json) && json.length) { pm.collectionVariables.set('document_id', json[0].id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get document",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{shipments_url}}/documents/{{document_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "WMS",
+      "item": [
+        {
+          "name": "List cells",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/cells"
+          }
+        },
+        {
+          "name": "Open cell",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/cells/open?cell_id={{cell_id}}"
+          }
+        },
+        {
+          "name": "Close cell",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/cells/close?cell_id={{cell_id}}"
+          }
+        },
+        {
+          "name": "Assign shipment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/assign?cell_id={{cell_id}}&shipment_id={{shipment_id}}"
+          }
+        },
+        {
+          "name": "Remove shipment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/remove?cell_id={{cell_id}}"
+          }
+        },
+        {
+          "name": "Create session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/wms/sessions",
+            "body": {"mode": "raw", "raw": "{}"}
+          }
+        },
+        {
+          "name": "Open cell in session",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/wms/sessions/1/open-cell?cell_id={{cell_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Measurements",
+      "item": [
+        {
+          "name": "Create measurement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/measurements",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"weight_kg\": 12.5,\n  \"length_cm\": 50,\n  \"width_cm\": 40,\n  \"height_cm\": 30\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Route Planning",
+      "item": [
+        {
+          "name": "Create route plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/routes/plan",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"origin_station\": \"A\",\n  \"destination_station\": \"B\",\n  \"wagons_count\": 2\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('route_id', json.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve route plan",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": "{{wms_url}}/routes/{{route_id}}/approve"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transportation",
+      "item": [
+        {
+          "name": "Load",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/transport/load",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        },
+        {
+          "name": "Unload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/transport/unload",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        },
+        {
+          "name": "Arrive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/transport/arrive",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delivery",
+      "item": [
+        {
+          "name": "Ready",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/delivery/ready",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        },
+        {
+          "name": "Confirm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": "{{wms_url}}/delivery/confirm",
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Auth health",
+          "request": {"method": "GET", "url": "{{auth_url}}/health"}
+        },
+        {
+          "name": "Shipments health",
+          "request": {"method": "GET", "url": "{{shipments_url}}/health"}
+        },
+        {
+          "name": "Finance health",
+          "request": {"method": "GET", "url": "{{finance_url}}/health"}
+        },
+        {
+          "name": "WMS health",
+          "request": {"method": "GET", "url": "{{wms_url}}/health"}
+        }
+      ]
+    }
+  ]
+}
