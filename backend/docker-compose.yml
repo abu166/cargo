@@ -29,5 +29,24 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  
+  migrate:
+    container_name: migrate
+    image: migrate/migrate:v4.15.2
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations/:/migrations
+    command: [
+      "-path", "/migrations/",
+      "-database",
+      "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-cargotrans}?sslmode=disable",
+      "up"
+    ]
+    env_file:
+      - .env
+
 volumes:
   postgres_data:
