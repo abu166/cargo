@@ -1,174 +1,33 @@
 services:
-  postgres:
-    image: postgres:16
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
-      POSTGRES_USER: cargo
-      POSTGRES_PASSWORD: cargo
+      PORT: "8080"
+      JWT_SECRET: "dev-secret"
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/cargotrans?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cargotrans
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cargotrans"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cargo"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  auth:
-    build:
-      context: .
-      dockerfile: ./services/auth/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/auth_db
-      JWT_SECRET: supersecret
-      JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 120
-      ADMIN_USER: admin@cargo.kz
-      ADMIN_PASSWORD: admin
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8001:8000"
-
-  shipments:
-    build:
-      context: .
-      dockerfile: ./services/shipments/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/shipments_db
-      JWT_SECRET: supersecret
-      JWT_ALGORITHM: HS256
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8002:8000"
-
-  finance:
-    build:
-      context: .
-      dockerfile: ./services/finance/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/finance_db
-      JWT_SECRET: supersecret
-      JWT_ALGORITHM: HS256
-      SHIPMENTS_URL: http://shipments:8000
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8003:8000"
-
-  wms:
-    build:
-      context: .
-      dockerfile: ./services/wms/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/wms_db
-      JWT_SECRET: supersecret
-      JWT_ALGORITHM: HS256
-      SHIPMENTS_URL: http://shipments:8000
-    depends_on:
-      postgres:
-        condition: service_healthy
-      shipments:
-        condition: service_started
-    ports:
-      - "8004:8000"
-
-  portal:
-    build:
-      context: .
-      dockerfile: ./services/portal/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/portal_db
-      JWT_SECRET: supersecret
-      JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 120
-      AUTH_URL: http://auth:8000
-      ADMIN_USER: admin@cargo.kz
-      ADMIN_PASSWORD: admin
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "3000:8000"
-
-  portal-sync:
-    build:
-      context: .
-      dockerfile: ./services/portal/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/portal_db
-      JWT_SECRET: supersecret
-      JWT_ALGORITHM: HS256
-      AUTH_URL: http://auth:8000
-      ADMIN_USER: admin@cargo.kz
-      ADMIN_PASSWORD: admin
-      SYNC_INTERVAL_SECONDS: 60
-    depends_on:
-      postgres:
-        condition: service_healthy
-      auth:
-        condition: service_started
-    command: ["python", "-m", "app.sync"]
-
-  migrate-auth:
-    build:
-      context: .
-      dockerfile: ./services/auth/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/auth_db
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["alembic", "-c", "/app/alembic.ini", "upgrade", "head"]
-
-  migrate-shipments:
-    build:
-      context: .
-      dockerfile: ./services/shipments/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/shipments_db
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["alembic", "-c", "/app/alembic.ini", "upgrade", "head"]
-
-  migrate-finance:
-    build:
-      context: .
-      dockerfile: ./services/finance/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/finance_db
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["alembic", "-c", "/app/alembic.ini", "upgrade", "head"]
-
-  migrate-wms:
-    build:
-      context: .
-      dockerfile: ./services/wms/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/wms_db
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["alembic", "-c", "/app/alembic.ini", "upgrade", "head"]
-
-  migrate-portal:
-    build:
-      context: .
-      dockerfile: ./services/portal/Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg2://cargo:cargo@postgres:5432/portal_db
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["alembic", "-c", "/app/alembic.ini", "upgrade", "head"]
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
-  pgdata:
+  postgres_data:

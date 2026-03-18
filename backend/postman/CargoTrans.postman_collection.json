@@ -1,779 +1,652 @@
 {
   "info": {
-    "name": "CargoTrans API",
+    "_postman_id": "f5049fea-9f7b-40f6-8d73-d7195d8b7a86",
+    "name": "CargoTrans Backend",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    {"key": "auth_url", "value": "http://localhost:8001"},
-    {"key": "shipments_url", "value": "http://localhost:8002"},
-    {"key": "finance_url", "value": "http://localhost:8003"},
-    {"key": "wms_url", "value": "http://localhost:8004"},
-    {"key": "token", "value": ""},
-    {"key": "shipment_id", "value": ""},
-    {"key": "document_id", "value": ""},
-    {"key": "route_id", "value": ""},
-    {"key": "cell_id", "value": "1"}
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "clientId",
+      "value": ""
+    },
+    {
+      "key": "employeeId",
+      "value": ""
+    },
+    {
+      "key": "shipmentId",
+      "value": ""
+    },
+    {
+      "key": "paymentId",
+      "value": ""
+    },
+    {
+      "key": "trackingCode",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
+    }
   ],
   "item": [
     {
-      "name": "Runner Flow (ordered)",
+      "name": "System",
       "item": [
         {
-          "name": "01 - Login",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "url": "{{auth_url}}/auth/login",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('login ok', () => pm.response.code === 200);",
-                  "const json = pm.response.json();",
-                  "pm.collectionVariables.set('token', json.access_token);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "02 - Create shipment",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{shipments_url}}/shipments",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"origin_station\": \"A\",\n  \"destination_station\": \"B\",\n  \"weight_kg\": 12.5\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('shipment created', () => pm.response.code === 200);",
-                  "const json = pm.response.json();",
-                  "pm.collectionVariables.set('shipment_id', json.id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "03 - Update status to TARIFF_CALCULATED",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{shipments_url}}/shipments/{{shipment_id}}/status",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"TARIFF_CALCULATED\"\n}"
-            }
-          }
-        },
-        {
-          "name": "04 - Update status to PAID",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{shipments_url}}/shipments/{{shipment_id}}/status",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"PAID\"\n}"
-            }
-          }
-        },
-        {
-          "name": "05 - Generate QR",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{shipments_url}}/shipments/{{shipment_id}}/qr"
-          }
-        },
-        {
-          "name": "06 - Generate documents",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{shipments_url}}/documents/generate",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"doc_types\": [\"LU-12\", \"LU-63\", \"WAYBILL\"]\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const json = pm.response.json();",
-                  "if (Array.isArray(json) && json.length) { pm.collectionVariables.set('document_id', json[0].id); }"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "07 - Scan",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{shipments_url}}/scan",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"scanned_by\": \"operator1\",\n  \"location\": \"Station A\"\n}"
-            }
-          }
-        },
-        {
-          "name": "08 - List WMS cells",
+          "name": "Health",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/cells"
-          }
-        },
-        {
-          "name": "09 - Open cell",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/cells/open?cell_id={{cell_id}}"
-          }
-        },
-        {
-          "name": "10 - Close cell",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/cells/close?cell_id={{cell_id}}"
-          }
-        },
-        {
-          "name": "11 - Assign shipment",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/assign?cell_id={{cell_id}}&shipment_id={{shipment_id}}"
-          }
-        },
-        {
-          "name": "12 - Remove shipment",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/remove?cell_id={{cell_id}}"
-          }
-        },
-        {
-          "name": "13 - Create measurement",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/measurements",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"weight_kg\": 12.5,\n  \"length_cm\": 50,\n  \"width_cm\": 40,\n  \"height_cm\": 30\n}"
-            }
-          }
-        },
-        {
-          "name": "14 - Create route plan",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/routes/plan",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"origin_station\": \"A\",\n  \"destination_station\": \"B\",\n  \"wagons_count\": 2\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const json = pm.response.json();",
-                  "pm.collectionVariables.set('route_id', json.id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "15 - Approve route plan",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/routes/{{route_id}}/approve"
-          }
-        },
-        {
-          "name": "16 - Transport load",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/transport/load",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
-          }
-        },
-        {
-          "name": "17 - Transport unload",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/transport/unload",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
-          }
-        },
-        {
-          "name": "18 - Transport arrive",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/transport/arrive",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
-          }
-        },
-        {
-          "name": "19 - Delivery ready",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/delivery/ready",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
-          }
-        },
-        {
-          "name": "20 - Delivery confirm",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/delivery/confirm",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
-          }
-        },
-        {
-          "name": "21 - Get shipment",
-          "request": {
-            "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{shipments_url}}/shipments/{{shipment_id}}"
-          }
-        },
-        {
-          "name": "22 - Get document",
-          "request": {
-            "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{shipments_url}}/documents/{{document_id}}"
-          }
-        },
-        {
-          "name": "23 - Audit logs",
-          "request": {
-            "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{auth_url}}/audit/logs"
-          }
-        },
-        {
-          "name": "24 - Health checks",
-          "request": {
-            "method": "GET",
-            "url": "{{auth_url}}/health"
+            "url": "{{baseUrl}}/health"
           }
         }
       ]
     },
     {
-      "name": "Auth & Users",
+      "name": "Auth",
       "item": [
         {
-          "name": "Login",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "url": "{{auth_url}}/auth/login",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
-            }
-          },
+          "name": "Register Client",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "const json = pm.response.json();",
-                  "pm.collectionVariables.set('token', json.access_token);"
-                ]
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('clientId', data.id);",
+                  "  if (data.token) pm.collectionVariables.set('token', data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Client User\",\n  \"email\": \"client@example.com\",\n  \"password\": \"secret123\",\n  \"role\": \"individual\"\n}"},
+            "url": "{{baseUrl}}/api/auth/register"
+          }
         },
         {
-          "name": "Me",
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.token) pm.collectionVariables.set('token', data.token);",
+                  "  if (data.id) pm.collectionVariables.set('clientId', data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"email\": \"client@example.com\",\n  \"password\": \"secret123\"\n}"},
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Current User",
           "request": {
             "method": "GET",
             "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{auth_url}}/auth/me"
+            "url": "{{baseUrl}}/api/auth/me"
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "Reference",
+      "item": [
         {
-          "name": "Logout",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{auth_url}}/auth/logout"
-          }
-        },
-        {
-          "name": "Users - List",
+          "name": "List Roles",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{auth_url}}/users"
+            "url": "{{baseUrl}}/api/roles"
           }
         },
         {
-          "name": "Users - Create",
+          "name": "List Stations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/stations"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Create Employee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('employeeId', data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{auth_url}}/users",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"agent1\",\n  \"password\": \"pass\",\n  \"full_name\": \"Agent\",\n  \"roles\": [\"AGENT\"]\n}"
-            }
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Receiver User\",\n  \"email\": \"receiver@example.com\",\n  \"password\": \"secret123\",\n  \"role\": \"receiver\",\n  \"station\": \"Ақтөбе\"\n}"},
+            "url": "{{baseUrl}}/api/users"
           }
         },
         {
-          "name": "Users - Update",
+          "name": "List Users",
           "request": {
-            "method": "PUT",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{auth_url}}/users/1",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"full_name\": \"Admin Updated\"\n}"
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clients",
+      "item": [
+        {
+          "name": "Create Corporate Client",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Corporate Contact\",\n  \"email\": \"corp@example.com\",\n  \"password\": \"secret123\",\n  \"company\": \"Cargo LLC\",\n  \"bin\": \"123456789012\",\n  \"deposit\": 15000\n}"},
+            "url": "{{baseUrl}}/api/clients"
+          }
+        },
+        {
+          "name": "List Corporate Clients",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/clients"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shipments Lifecycle",
+      "item": [
+        {
+          "name": "Create Shipment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('shipmentId', data.id);",
+                  "  if (data.shipment_number) pm.collectionVariables.set('trackingCode', data.shipment_number);",
+                  "  else if (data.tracking_code) pm.collectionVariables.set('trackingCode', data.tracking_code);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
             }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"client_id\": \"{{clientId}}\",\n  \"client_name\": \"Client User\",\n  \"client_email\": \"client@example.com\",\n  \"from_station\": \"Алматы-1\",\n  \"to_station\": \"Ақтөбе\",\n  \"departure_date\": \"2026-03-15T10:00:00Z\",\n  \"weight\": \"20\",\n  \"dimensions\": \"30x30x40\",\n  \"description\": \"Cargo box\",\n  \"value\": \"50000\",\n  \"cost\": 7000,\n  \"quantity_places\": 1\n}"},
+            "url": "{{baseUrl}}/api/shipments"
+          }
+        },
+        {
+          "name": "Get Shipment",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}"
+          }
+        },
+        {
+          "name": "Calculate Tariff",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/calculate-tariff"
+          }
+        },
+        {
+          "name": "Send To Payment",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/send-to-payment"
+          }
+        },
+        {
+          "name": "Generate QR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.shipment && data.shipment.tracking_code) pm.collectionVariables.set('trackingCode', data.shipment.tracking_code);",
+                  "  if (data.shipment && data.shipment.id) pm.collectionVariables.set('shipmentId', data.shipment.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/generate-qr"
+          }
+        },
+        {
+          "name": "Ready For Loading",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/ready-for-loading"
+          }
+        },
+        {
+          "name": "Load Shipment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"current_station\": \"Алматы-1\",\n  \"transport_unit_id\": \"wagon-12\"\n}"},
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/load"
+          }
+        },
+        {
+          "name": "Dispatch Shipment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"current_station\": \"Алматы-1\"\n}"},
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/dispatch"
+          }
+        },
+        {
+          "name": "Mark Transit",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"current_station\": \"Қарағанды\"\n}"},
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/mark-transit"
+          }
+        },
+        {
+          "name": "Arrive Shipment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"current_station\": \"Ақтөбе\"\n}"},
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/arrive"
+          }
+        },
+        {
+          "name": "Ready For Issue",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/ready-for-issue"
+          }
+        },
+        {
+          "name": "Issue Shipment",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/issue"
+          }
+        },
+        {
+          "name": "Close Shipment",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/close"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('paymentId', data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": \"{{shipmentId}}\",\n  \"amount\": 7000,\n  \"payment_method\": \"POS\",\n  \"pos_terminal_reference\": \"POS-001\"\n}"},
+            "url": "{{baseUrl}}/api/payments"
+          }
+        },
+        {
+          "name": "Get Payment",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/payments/{{paymentId}}"
+          }
+        },
+        {
+          "name": "Confirm Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.payment && data.payment.id) pm.collectionVariables.set('paymentId', data.payment.id);",
+                  "  if (data.shipment && data.shipment.id) pm.collectionVariables.set('shipmentId', data.shipment.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/payments/{{paymentId}}/confirm"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tracking",
+      "item": [
+        {
+          "name": "Track Shipment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.shipment && data.shipment.id) pm.collectionVariables.set('shipmentId', data.shipment.id);",
+                  "  if (data.shipment && data.shipment.tracking_code) pm.collectionVariables.set('trackingCode', data.shipment.tracking_code);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/track/{{trackingCode}}"
+          }
+        },
+        {
+          "name": "Scan Event",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": \"{{shipmentId}}\",\n  \"event_type\": \"MANUAL_SCAN\",\n  \"station_id\": \"Ақтөбе\",\n  \"comment\": \"scan checkpoint\"\n}"},
+            "url": "{{baseUrl}}/api/scan"
+          }
+        },
+        {
+          "name": "Scan Events By Shipment",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/scan-events"
+          }
+        },
+        {
+          "name": "Tracking History",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/tracking-history"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transit and Arrival",
+      "item": [
+        {
+          "name": "Transit Incoming",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/transit/incoming?station=Ақтөбе"
+          }
+        },
+        {
+          "name": "Transit Outgoing",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/transit/outgoing?station=Алматы-1"
+          }
+        },
+        {
+          "name": "Arrivals Pending",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/arrivals/pending?station=Ақтөбе"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports and Audit",
+      "item": [
+        {
+          "name": "Dashboard Report",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/reports/dashboard"
+          }
+        },
+        {
+          "name": "Finance Report",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/reports/finance"
+          }
+        },
+        {
+          "name": "Status Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/reports/status-summary"
           }
         },
         {
           "name": "Audit Logs",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{auth_url}}/audit/logs"
+            "url": "{{baseUrl}}/api/audit/logs"
           }
         }
       ]
     },
     {
-      "name": "Shipments",
+      "name": "Notifications",
       "item": [
         {
-          "name": "Create shipment",
+          "name": "List Notifications",
           "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{shipments_url}}/shipments",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"origin_station\": \"A\",\n  \"destination_station\": \"B\",\n  \"weight_kg\": 12.5\n}"
-            }
-          },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/notifications?userId={{clientId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pilot Flow Test Order",
+      "item": [
+        {
+          "name": "01 Create Shipment",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "const json = pm.response.json();",
-                  "pm.collectionVariables.set('shipment_id', json.id);"
-                ]
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('shipmentId', data.id);",
+                  "  if (data.shipment_number) pm.collectionVariables.set('trackingCode', data.shipment_number);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
-        },
-        {
-          "name": "Get shipment",
+          ],
           "request": {
-            "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{shipments_url}}/shipments/{{shipment_id}}"
-          }
-        },
-        {
-          "name": "List shipments",
-          "request": {
-            "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{shipments_url}}/shipments"
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"client_id\": \"{{clientId}}\",\n  \"client_name\": \"Client User\",\n  \"client_email\": \"client@example.com\",\n  \"from_station\": \"Алматы-1\",\n  \"to_station\": \"Ақтөбе\",\n  \"departure_date\": \"2026-03-15T10:00:00Z\",\n  \"weight\": \"20\",\n  \"dimensions\": \"30x30x40\",\n  \"description\": \"Cargo box\",\n  \"value\": \"50000\",\n  \"cost\": 7000,\n  \"quantity_places\": 1\n}"},
+            "url": "{{baseUrl}}/api/shipments"
           }
         },
         {
-          "name": "Cancel shipment",
-          "request": {
-            "method": "PUT",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{shipments_url}}/shipments/{{shipment_id}}/cancel"
-          }
-        }
-      ]
-    },
-    {
-      "name": "QR & Scanning",
-      "item": [
-        {
-          "name": "Generate QR",
+          "name": "02 Calculate Tariff",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{shipments_url}}/shipments/{{shipment_id}}/qr"
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/calculate-tariff"
           }
         },
         {
-          "name": "Scan",
+          "name": "03 Send To Payment",
           "request": {
             "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{shipments_url}}/scan",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"scanned_by\": \"operator1\",\n  \"location\": \"Station A\"\n}"
-            }
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/send-to-payment"
           }
-        }
-      ]
-    },
-    {
-      "name": "Status",
-      "item": [
+        },
         {
-          "name": "Update status",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{shipments_url}}/shipments/{{shipment_id}}/status",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"TARIFF_CALCULATED\"\n}"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Documents",
-      "item": [
-        {
-          "name": "Generate documents",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{shipments_url}}/documents/generate",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"doc_types\": [\"LU-12\", \"LU-63\", \"WAYBILL\"]\n}"
-            }
-          },
+          "name": "04 Create Payment",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "const json = pm.response.json();",
-                  "if (Array.isArray(json) && json.length) { pm.collectionVariables.set('document_id', json[0].id); }"
-                ]
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) pm.collectionVariables.set('paymentId', data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
-        },
-        {
-          "name": "Get document",
+          ],
           "request": {
-            "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{shipments_url}}/documents/{{document_id}}"
-          }
-        }
-      ]
-    },
-    {
-      "name": "WMS",
-      "item": [
-        {
-          "name": "List cells",
-          "request": {
-            "method": "GET",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/cells"
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": \"{{shipmentId}}\",\n  \"amount\": 7000,\n  \"payment_method\": \"POS\",\n  \"pos_terminal_reference\": \"POS-001\"\n}"},
+            "url": "{{baseUrl}}/api/payments"
           }
         },
         {
-          "name": "Open cell",
+          "name": "05 Confirm Payment",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/cells/open?cell_id={{cell_id}}"
+            "url": "{{baseUrl}}/api/payments/{{paymentId}}/confirm"
           }
         },
         {
-          "name": "Close cell",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/cells/close?cell_id={{cell_id}}"
-          }
-        },
-        {
-          "name": "Assign shipment",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/assign?cell_id={{cell_id}}&shipment_id={{shipment_id}}"
-          }
-        },
-        {
-          "name": "Remove shipment",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/remove?cell_id={{cell_id}}"
-          }
-        },
-        {
-          "name": "Create session",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/wms/sessions",
-            "body": {"mode": "raw", "raw": "{}"}
-          }
-        },
-        {
-          "name": "Open cell in session",
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/wms/sessions/1/open-cell?cell_id={{cell_id}}"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Measurements",
-      "item": [
-        {
-          "name": "Create measurement",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/measurements",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"shipment_id\": {{shipment_id}},\n  \"weight_kg\": 12.5,\n  \"length_cm\": 50,\n  \"width_cm\": 40,\n  \"height_cm\": 30\n}"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Route Planning",
-      "item": [
-        {
-          "name": "Create route plan",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/routes/plan",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"origin_station\": \"A\",\n  \"destination_station\": \"B\",\n  \"wagons_count\": 2\n}"
-            }
-          },
+          "name": "06 Generate QR",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "const json = pm.response.json();",
-                  "pm.collectionVariables.set('route_id', json.id);"
-                ]
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.shipment && data.shipment.tracking_code) pm.collectionVariables.set('trackingCode', data.shipment.tracking_code);",
+                  "  if (data.shipment && data.shipment.id) pm.collectionVariables.set('shipmentId', data.shipment.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
-        },
-        {
-          "name": "Approve route plan",
+          ],
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
-            "url": "{{wms_url}}/routes/{{route_id}}/approve"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Transportation",
-      "item": [
-        {
-          "name": "Load",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/transport/load",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/generate-qr"
           }
         },
         {
-          "name": "Unload",
+          "name": "07 Load Shipment",
           "request": {
             "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/transport/unload",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"current_station\": \"Алматы-1\",\n  \"transport_unit_id\": \"wagon-12\"\n}"},
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/load"
           }
         },
         {
-          "name": "Arrive",
+          "name": "08 Dispatch Shipment",
           "request": {
             "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/transport/arrive",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
-          }
-        }
-      ]
-    },
-    {
-      "name": "Delivery",
-      "item": [
-        {
-          "name": "Ready",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/delivery/ready",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"current_station\": \"Алматы-1\"\n}"},
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/dispatch"
           }
         },
         {
-          "name": "Confirm",
+          "name": "09 Mark Transit",
           "request": {
             "method": "POST",
-            "header": [
-              {"key": "Authorization", "value": "Bearer {{token}}"},
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "url": "{{wms_url}}/delivery/confirm",
-            "body": {"mode": "raw", "raw": "{\n  \"shipment_id\": {{shipment_id}}\n}"}
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"current_station\": \"Қарағанды\"\n}"},
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/mark-transit"
           }
-        }
-      ]
-    },
-    {
-      "name": "System",
-      "item": [
-        {
-          "name": "Auth health",
-          "request": {"method": "GET", "url": "{{auth_url}}/health"}
         },
         {
-          "name": "Shipments health",
-          "request": {"method": "GET", "url": "{{shipments_url}}/health"}
+          "name": "10 Arrive Shipment",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"current_station\": \"Ақтөбе\"\n}"},
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/arrive"
+          }
         },
         {
-          "name": "Finance health",
-          "request": {"method": "GET", "url": "{{finance_url}}/health"}
+          "name": "11 Ready For Issue",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/ready-for-issue"
+          }
         },
         {
-          "name": "WMS health",
-          "request": {"method": "GET", "url": "{{wms_url}}/health"}
+          "name": "12 Issue Shipment",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/issue"
+          }
+        },
+        {
+          "name": "13 Close Shipment",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/shipments/{{shipmentId}}/close"
+          }
         }
       ]
     }
