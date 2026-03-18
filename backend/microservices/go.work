@@ -1,0 +1,12 @@
+go 1.22
+
+use (
+    ./auth-service
+    ./shipment-service
+    ./payment-service
+    ./tracking-service
+    ./notification-service
+    ./reference-service
+    ./audit-service
+    ./report-service
+)

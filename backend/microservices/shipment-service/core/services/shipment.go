@@ -1,0 +1,388 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"cargo/backend/internal/model"
+
+	"github.com/google/uuid"
+)
+
+type CreateShipmentRequest struct {
+	ClientID       string
+	ClientName     string
+	ClientEmail    string
+	FromStation    string
+	ToStation      string
+	DepartureDate  time.Time
+	Weight         string
+	Dimensions     string
+	Description    string
+	Value          string
+	Cost           float64
+	QuantityPlaces int
+	ReceiverName   *string
+	ReceiverPhone  *string
+	TrainTime      *string
+	CreatedBy      *string
+}
+
+func (s *ShipmentService) Create(ctx context.Context, req CreateShipmentRequest) (model.Shipment, error) {
+	now := time.Now().UTC()
+	route := calculateRoute(req.FromStation, req.ToStation)
+	var nextStation *string
+	if len(route) > 1 {
+		nextStation = &route[1]
+	}
+	number := "SH-" + fmt.Sprintf("%06d", now.UnixNano()%1000000)
+	shipment := model.Shipment{
+		ID:             uuid.NewString(),
+		ShipmentNumber: number,
+		ClientID:       req.ClientID,
+		ClientName:     req.ClientName,
+		ClientEmail:    req.ClientEmail,
+		FromStation:    req.FromStation,
+		ToStation:      req.ToStation,
+		CurrentStation: req.FromStation,
+		NextStation:    nextStation,
+		Route:          route,
+		Status:         legacyStatusForLifecycle(model.ShipmentCreated),
+		ShipmentStatus: model.ShipmentCreated,
+		PaymentStatus:  model.PaymentUnpaid,
+		DepartureDate:  req.DepartureDate,
+		Weight:         req.Weight,
+		Dimensions:     req.Dimensions,
+		Description:    req.Description,
+		Value:          req.Value,
+		Cost:           req.Cost,
+		QuantityPlaces: req.QuantityPlaces,
+		ReceiverName:   req.ReceiverName,
+		ReceiverPhone:  req.ReceiverPhone,
+		TrainTime:      req.TrainTime,
+		TrackingCode:   ptr(number),
+		LastUpdatedAt:  now,
+		CreatedBy:      req.CreatedBy,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	created, err := s.repo.CreateShipment(ctx, shipment)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	_ = s.repo.AddShipmentHistory(ctx, model.ShipmentHistory{
+		ShipmentID: created.ID,
+		Action:     "Created",
+		OperatorID: req.CreatedBy,
+		Details:    "Shipment created",
+		NewStatus:  ptr(string(created.ShipmentStatus)),
+		CreatedAt:  now,
+	})
+	_ = s.repo.AddAuditLog(ctx, model.AuditLog{
+		ID:         uuid.NewString(),
+		UserID:     req.CreatedBy,
+		EntityType: "shipment",
+		EntityID:   created.ID,
+		Action:     "CREATE_SHIPMENT",
+		NewValue:   ptr(string(created.ShipmentStatus)),
+		CreatedAt:  now,
+	})
+	return created, nil
+}
+
+func (s *ShipmentService) Get(ctx context.Context, id string) (model.Shipment, error) {
+	return s.repo.GetShipmentByID(ctx, id)
+}
+
+func (s *ShipmentService) List(ctx context.Context, filter model.ShipmentFilter) ([]model.Shipment, error) {
+	if filter.Type == "by-station" {
+		return s.repo.ListShipmentsByOriginStation(ctx, filter.Station)
+	}
+	return s.repo.ListShipments(ctx, filter)
+}
+
+func (s *ShipmentService) Edit(ctx context.Context, shipment model.Shipment) (model.Shipment, error) {
+	current, err := s.repo.GetShipmentByID(ctx, shipment.ID)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	if current.ShipmentStatus != model.ShipmentCreated && current.ShipmentStatus != model.ShipmentDraft {
+		return model.Shipment{}, ErrForbidden
+	}
+	shipment.ShipmentStatus = current.ShipmentStatus
+	shipment.PaymentStatus = current.PaymentStatus
+	shipment.Status = legacyStatusForLifecycle(shipment.ShipmentStatus)
+	shipment.UpdatedAt = time.Now().UTC()
+	shipment.LastUpdatedAt = shipment.UpdatedAt
+	return s.repo.UpdateShipment(ctx, shipment)
+}
+
+func (s *ShipmentService) CalculateTariff(ctx context.Context, id string) (model.Shipment, error) {
+	shipment, err := s.repo.GetShipmentByID(ctx, id)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	weightSurcharge := 0.0
+	if shipment.Weight != "" {
+		var weight float64
+		fmt.Sscanf(shipment.Weight, "%f", &weight)
+		if weight > 20 {
+			weightSurcharge = (weight - 20) * 150
+		}
+	}
+	shipment.Cost = 5000 + weightSurcharge
+	shipment.UpdatedAt = time.Now().UTC()
+	shipment.LastUpdatedAt = shipment.UpdatedAt
+	return s.repo.UpdateShipment(ctx, shipment)
+}
+
+func (s *ShipmentService) SendToPayment(ctx context.Context, id string) (model.Shipment, error) {
+	return s.transition(ctx, id, model.ShipmentPaymentPending, nil, nil, nil, "Sent to payment", nil)
+}
+
+func (s *ShipmentService) ReadyForLoading(ctx context.Context, id string, operatorID, operatorName *string) (model.Shipment, error) {
+	return s.transition(ctx, id, model.ShipmentReadyForLoading, operatorID, operatorName, nil, "Ready for loading", nil)
+}
+
+func (s *ShipmentService) Load(ctx context.Context, id string, operatorID, operatorName, station, transportUnitID *string) (model.Shipment, error) {
+	shipment, err := s.transition(ctx, id, model.ShipmentLoaded, operatorID, operatorName, station, "Shipment loaded", transportUnitID)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	if station != nil {
+		_, _ = s.repo.CreateScanEvent(ctx, model.ScanEvent{
+			ID:              uuid.NewString(),
+			ShipmentID:      id,
+			QRCodeID:        shipment.QRCodeID,
+			EventType:       "LOAD",
+			StationID:       station,
+			TransportUnitID: transportUnitID,
+			UserID:          operatorID,
+			OldStatus:       ptr(string(model.ShipmentReadyForLoading)),
+			NewStatus:       ptr(string(model.ShipmentLoaded)),
+			ScannedAt:       time.Now().UTC(),
+		})
+	}
+	return shipment, nil
+}
+
+func (s *ShipmentService) Dispatch(ctx context.Context, id string, operatorID, operatorName, station *string) (model.Shipment, error) {
+	return s.transition(ctx, id, model.ShipmentInTransit, operatorID, operatorName, station, "Shipment dispatched", nil)
+}
+
+func (s *ShipmentService) MarkTransit(ctx context.Context, id string, station string, operatorID, operatorName *string) (model.Shipment, error) {
+	shipment, err := s.repo.GetShipmentByID(ctx, id)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	if shipment.ShipmentStatus != model.ShipmentInTransit && shipment.ShipmentStatus != model.ShipmentLoaded {
+		return model.Shipment{}, ErrInvalidTransition
+	}
+	if station == shipment.ToStation {
+		return model.Shipment{}, ErrForbidden
+	}
+	if indexOf(shipment.Route, station) == -1 {
+		return model.Shipment{}, ErrForbidden
+	}
+	shipment.CurrentStation = station
+	nextIndex := indexOf(shipment.Route, station) + 1
+	if nextIndex < len(shipment.Route) {
+		shipment.NextStation = &shipment.Route[nextIndex]
+	}
+	shipment.UpdatedAt = time.Now().UTC()
+	shipment.LastUpdatedAt = shipment.UpdatedAt
+	shipment, err = s.repo.UpdateShipment(ctx, shipment)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	_, _ = s.repo.CreateTransitEvent(ctx, model.TransitEvent{
+		ID:         uuid.NewString(),
+		ShipmentID: id,
+		StationID:  station,
+		UserID:     operatorID,
+		EventTime:  time.Now().UTC(),
+	})
+	_ = s.repo.AddAuditLog(ctx, model.AuditLog{
+		ID:         uuid.NewString(),
+		UserID:     operatorID,
+		EntityType: "shipment",
+		EntityID:   id,
+		Action:     "TRANSIT_EVENT",
+		NewValue:   ptr(station),
+		StationID:  ptr(station),
+		CreatedAt:  time.Now().UTC(),
+	})
+	return shipment, nil
+}
+
+func (s *ShipmentService) Arrive(ctx context.Context, id string, station string, operatorID, operatorName *string) (model.Shipment, *model.Notification, error) {
+	shipment, err := s.repo.GetShipmentByID(ctx, id)
+	if err != nil {
+		return model.Shipment{}, nil, err
+	}
+	if station != shipment.ToStation {
+		return model.Shipment{}, nil, ErrForbidden
+	}
+	shipment, err = s.transition(ctx, id, model.ShipmentArrived, operatorID, operatorName, &station, "Shipment arrived", nil)
+	if err != nil {
+		return model.Shipment{}, nil, err
+	}
+	_, _ = s.repo.CreateArrivalEvent(ctx, model.ArrivalEvent{
+		ID:                      uuid.NewString(),
+		ShipmentID:              id,
+		StationID:               station,
+		UserID:                  operatorID,
+		EventTime:               time.Now().UTC(),
+		ConfirmedAsFinalArrival: true,
+	})
+	message := fmt.Sprintf("Ваш груз %s прибыл в пункт назначения %s", shipment.ShipmentNumber, station)
+	notification, err := s.repo.CreateNotification(ctx, model.Notification{
+		UserID:    shipment.ClientID,
+		Message:   message,
+		Type:      "shipment_arrival",
+		RelatedID: ptr(shipment.ID),
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		return shipment, nil, nil
+	}
+	return shipment, &notification, nil
+}
+
+func (s *ShipmentService) ReadyForIssue(ctx context.Context, id string, operatorID, operatorName *string) (model.Shipment, error) {
+	return s.transition(ctx, id, model.ShipmentReadyForIssue, operatorID, operatorName, nil, "Ready for issue", nil)
+}
+
+func (s *ShipmentService) Issue(ctx context.Context, id string, operatorID, operatorName *string) (model.Shipment, error) {
+	return s.transition(ctx, id, model.ShipmentIssued, operatorID, operatorName, nil, "Issued to receiver", nil)
+}
+
+func (s *ShipmentService) Close(ctx context.Context, id string, operatorID, operatorName *string) (model.Shipment, error) {
+	return s.transition(ctx, id, model.ShipmentClosed, operatorID, operatorName, nil, "Shipment closed", nil)
+}
+
+func (s *ShipmentService) Cancel(ctx context.Context, id string, operatorID, operatorName *string, reason *string) (model.Shipment, error) {
+	return s.transition(ctx, id, model.ShipmentCancelled, operatorID, operatorName, nil, "Shipment cancelled", nil, reason)
+}
+
+func (s *ShipmentService) Hold(ctx context.Context, id string, operatorID, operatorName *string, reason *string) (model.Shipment, error) {
+	return s.transition(ctx, id, model.ShipmentOnHold, operatorID, operatorName, nil, "Shipment on hold", nil, reason)
+}
+
+func (s *ShipmentService) Damage(ctx context.Context, id string, operatorID, operatorName *string, reason *string) (model.Shipment, error) {
+	return s.transition(ctx, id, model.ShipmentDamaged, operatorID, operatorName, nil, "Shipment damaged", nil, reason)
+}
+
+func (s *ShipmentService) ActionContext(ctx context.Context, id string, user *AuthenticatedUser) (model.ActionContext, error) {
+	shipment, err := s.repo.GetShipmentByID(ctx, id)
+	if err != nil {
+		return model.ActionContext{}, err
+	}
+	result := model.ActionContext{
+		Shipment:     shipment,
+		UserRole:     "guest",
+		RequiresAuth: false,
+	}
+	if user == nil {
+		result.AllowedActions = []string{"view"}
+		return result, nil
+	}
+	if user.ID == shipment.ClientID {
+		result.UserRole = "sender"
+		result.AllowedActions = []string{"view"}
+		return result, nil
+	}
+	if user.Station == shipment.FromStation {
+		result.UserRole = "origin-receiver"
+		result.AllowedActions = []string{"view", "mark-loaded"}
+		return result, nil
+	}
+	if user.Station == shipment.ToStation {
+		result.UserRole = "destination-receiver"
+		result.AllowedActions = []string{"view", "mark-arrived", "issue"}
+		return result, nil
+	}
+	result.UserRole = "none"
+	result.AllowedActions = []string{"view"}
+	return result, nil
+}
+
+func (s *ShipmentService) transition(ctx context.Context, id string, next model.ShipmentLifecycle, operatorID, operatorName, station *string, action string, transportUnitID *string, reason ...*string) (model.Shipment, error) {
+	shipment, err := s.repo.GetShipmentByID(ctx, id)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	if !isAllowedTransition(shipment.ShipmentStatus, next) {
+		return model.Shipment{}, ErrInvalidTransition
+	}
+	old := shipment.ShipmentStatus
+	shipment.ShipmentStatus = next
+	shipment.Status = legacyStatusForLifecycle(next)
+	if station != nil {
+		shipment.CurrentStation = *station
+	}
+	if transportUnitID != nil {
+		shipment.TransportUnitID = transportUnitID
+	}
+	shipment.UpdatedAt = time.Now().UTC()
+	shipment.LastUpdatedAt = shipment.UpdatedAt
+	if next == model.ShipmentArrived {
+		shipment.NextStation = nil
+	}
+	updated, err := s.repo.UpdateShipment(ctx, shipment)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	var reasonText *string
+	if len(reason) > 0 {
+		reasonText = reason[0]
+	}
+	_ = s.repo.AddShipmentHistory(ctx, model.ShipmentHistory{
+		ShipmentID:   id,
+		Action:       action,
+		OperatorID:   operatorID,
+		OperatorName: operatorName,
+		Station:      station,
+		Details:      action,
+		OldStatus:    ptr(string(old)),
+		NewStatus:    ptr(string(next)),
+		Reason:       reasonText,
+		CreatedAt:    time.Now().UTC(),
+	})
+	_ = s.repo.AddAuditLog(ctx, model.AuditLog{
+		ID:         uuid.NewString(),
+		UserID:     operatorID,
+		EntityType: "shipment",
+		EntityID:   id,
+		Action:     action,
+		OldValue:   ptr(string(old)),
+		NewValue:   ptr(string(next)),
+		StationID:  station,
+		Reason:     reasonText,
+		CreatedAt:  time.Now().UTC(),
+	})
+	return updated, nil
+}
+
+func isAllowedTransition(current, next model.ShipmentLifecycle) bool {
+	allowed := map[model.ShipmentLifecycle][]model.ShipmentLifecycle{
+		model.ShipmentDraft:           {model.ShipmentCreated},
+		model.ShipmentCreated:         {model.ShipmentPaymentPending, model.ShipmentCancelled},
+		model.ShipmentPaymentPending:  {model.ShipmentPaid, model.ShipmentCancelled},
+		model.ShipmentPaid:            {model.ShipmentReadyForLoading, model.ShipmentOnHold},
+		model.ShipmentReadyForLoading: {model.ShipmentLoaded, model.ShipmentOnHold},
+		model.ShipmentLoaded:          {model.ShipmentInTransit, model.ShipmentDamaged},
+		model.ShipmentInTransit:       {model.ShipmentArrived, model.ShipmentOnHold, model.ShipmentDamaged},
+		model.ShipmentArrived:         {model.ShipmentReadyForIssue, model.ShipmentDamaged},
+		model.ShipmentReadyForIssue:   {model.ShipmentIssued},
+		model.ShipmentIssued:          {model.ShipmentClosed},
+		model.ShipmentOnHold:          {model.ShipmentReadyForLoading, model.ShipmentInTransit, model.ShipmentArrived},
+	}
+	for _, item := range allowed[current] {
+		if item == next {
+			return true
+		}
+	}
+	return false
+}

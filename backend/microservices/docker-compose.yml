@@ -1,0 +1,214 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: cargotrans_postgres
+    environment:
+      POSTGRES_USER: cargotrans
+      POSTGRES_PASSWORD: cargotrans_password
+      POSTGRES_DB: cargotrans_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    networks:
+      - cargotrans_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: cargotrans_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - cargotrans_network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: cargotrans_auth
+    ports:
+      - "8001:8001"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: cargotrans
+      DB_PASSWORD: cargotrans_password
+      DB_NAME: cargotrans_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: your_jwt_secret_key_here
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - cargotrans_network
+
+  # Shipment Service
+  shipment-service:
+    build:
+      context: ./shipment-service
+      dockerfile: Dockerfile
+    container_name: cargotrans_shipment
+    ports:
+      - "8002:8002"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: cargotrans
+      DB_PASSWORD: cargotrans_password
+      DB_NAME: cargotrans_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+      - auth-service
+    networks:
+      - cargotrans_network
+
+  # Payment Service
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: cargotrans_payment
+    ports:
+      - "8003:8003"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: cargotrans
+      DB_PASSWORD: cargotrans_password
+      DB_NAME: cargotrans_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+      - shipment-service
+    networks:
+      - cargotrans_network
+
+  # Tracking Service
+  tracking-service:
+    build:
+      context: ./tracking-service
+      dockerfile: Dockerfile
+    container_name: cargotrans_tracking
+    ports:
+      - "8004:8004"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: cargotrans
+      DB_PASSWORD: cargotrans_password
+      DB_NAME: cargotrans_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+      - shipment-service
+    networks:
+      - cargotrans_network
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: cargotrans_notification
+    ports:
+      - "8005:8005"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: cargotrans
+      DB_PASSWORD: cargotrans_password
+      DB_NAME: cargotrans_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - cargotrans_network
+
+  # Reference Service
+  reference-service:
+    build:
+      context: ./reference-service
+      dockerfile: Dockerfile
+    container_name: cargotrans_reference
+    ports:
+      - "8006:8006"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: cargotrans
+      DB_PASSWORD: cargotrans_password
+      DB_NAME: cargotrans_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - cargotrans_network
+
+  # Audit Service
+  audit-service:
+    build:
+      context: ./audit-service
+      dockerfile: Dockerfile
+    container_name: cargotrans_audit
+    ports:
+      - "8007:8007"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: cargotrans
+      DB_PASSWORD: cargotrans_password
+      DB_NAME: cargotrans_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - cargotrans_network
+
+  # Report Service
+  report-service:
+    build:
+      context: ./report-service
+      dockerfile: Dockerfile
+    container_name: cargotrans_report
+    ports:
+      - "8008:8008"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: cargotrans
+      DB_PASSWORD: cargotrans_password
+      DB_NAME: cargotrans_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - cargotrans_network
+
+volumes:
+  postgres_data:
+
+networks:
+  cargotrans_network:
+    driver: bridge
