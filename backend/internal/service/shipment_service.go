@@ -11,25 +11,49 @@ import (
 )
 
 type CreateShipmentRequest struct {
-	ClientID      string
-	ClientName    string
-	ClientEmail   string
-	FromStation   string
-	ToStation     string
-	DepartureDate time.Time
-	Weight        string
-	Dimensions    string
-	Description   string
-	Value         string
-	Cost          float64
+	ClientID       string
+	ClientName     string
+	ClientEmail    string
+	FromStation    string
+	ToStation      string
+	DepartureDate  time.Time
+	Weight         string
+	Dimensions     string
+	Description    string
+	Value          string
+	Cost           float64
 	QuantityPlaces int
-	ReceiverName  *string
-	ReceiverPhone *string
-	TrainTime     *string
-	CreatedBy     *string
+	ReceiverName   *string
+	ReceiverPhone  *string
+	TrainTime      *string
+	CreatedBy      *string
+}
+
+type CorrectionRequest struct {
+	ClientName     *string
+	ClientEmail    *string
+	FromStation    *string
+	ToStation      *string
+	Weight         *string
+	Dimensions     *string
+	Description    *string
+	Value          *string
+	Cost           *float64
+	QuantityPlaces *int
+	ReceiverName   *string
+	ReceiverPhone  *string
+	Reason         string
+}
+
+type IssueRequest struct {
+	ReceiverName  string
+	ReceiverPhone string
 }
 
 func (s *ShipmentService) Create(ctx context.Context, req CreateShipmentRequest) (model.Shipment, error) {
+	if err := validateCreateShipment(req); err != nil {
+		return model.Shipment{}, err
+	}
 	now := time.Now().UTC()
 	route := calculateRoute(req.FromStation, req.ToStation)
 	var nextStation *string
@@ -109,6 +133,9 @@ func (s *ShipmentService) Edit(ctx context.Context, shipment model.Shipment) (mo
 	}
 	if current.ShipmentStatus != model.ShipmentCreated && current.ShipmentStatus != model.ShipmentDraft {
 		return model.Shipment{}, ErrForbidden
+	}
+	if err := validateEditableShipment(shipment); err != nil {
+		return model.Shipment{}, err
 	}
 	shipment.ShipmentStatus = current.ShipmentStatus
 	shipment.PaymentStatus = current.PaymentStatus
@@ -255,6 +282,40 @@ func (s *ShipmentService) ReadyForIssue(ctx context.Context, id string, operator
 }
 
 func (s *ShipmentService) Issue(ctx context.Context, id string, operatorID, operatorName *string) (model.Shipment, error) {
+	return s.IssueWithVerification(ctx, id, operatorID, operatorName, IssueRequest{})
+}
+
+func (s *ShipmentService) IssueWithVerification(ctx context.Context, id string, operatorID, operatorName *string, req IssueRequest) (model.Shipment, error) {
+	shipment, err := s.repo.GetShipmentByID(ctx, id)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	if shipment.ShipmentStatus != model.ShipmentReadyForIssue {
+		return model.Shipment{}, ErrInvalidTransition
+	}
+	if shipment.ReceiverName == nil || shipment.ReceiverPhone == nil {
+		return model.Shipment{}, fmt.Errorf("%w: shipment receiver data is incomplete", ErrInvalidState)
+	}
+	if req.ReceiverName == "" || req.ReceiverPhone == "" {
+		return model.Shipment{}, fmt.Errorf("%w: receiver verification data is required", ErrValidation)
+	}
+	if req.ReceiverName != *shipment.ReceiverName || req.ReceiverPhone != *shipment.ReceiverPhone {
+		return model.Shipment{}, fmt.Errorf("%w: receiver verification failed", ErrForbidden)
+	}
+	events, err := s.repo.ListScanEvents(ctx, id)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	var issueScanFound bool
+	for _, event := range events {
+		if event.EventType == "ISSUE_SCAN" {
+			issueScanFound = true
+			break
+		}
+	}
+	if !issueScanFound {
+		return model.Shipment{}, fmt.Errorf("%w: ISSUE_SCAN is required before issue", ErrInvalidState)
+	}
 	return s.transition(ctx, id, model.ShipmentIssued, operatorID, operatorName, nil, "Issued to receiver", nil)
 }
 
@@ -272,6 +333,101 @@ func (s *ShipmentService) Hold(ctx context.Context, id string, operatorID, opera
 
 func (s *ShipmentService) Damage(ctx context.Context, id string, operatorID, operatorName *string, reason *string) (model.Shipment, error) {
 	return s.transition(ctx, id, model.ShipmentDamaged, operatorID, operatorName, nil, "Shipment damaged", nil, reason)
+}
+
+func (s *ShipmentService) CorrectAfterPayment(ctx context.Context, id string, operatorID, operatorName *string, req CorrectionRequest) (model.Shipment, error) {
+	if req.Reason == "" {
+		return model.Shipment{}, fmt.Errorf("%w: correction reason is required", ErrValidation)
+	}
+	shipment, err := s.repo.GetShipmentByID(ctx, id)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	if shipment.PaymentStatus != model.PaymentConfirmed && shipment.ShipmentStatus != model.ShipmentPaid && shipment.ShipmentStatus != model.ShipmentReadyForLoading {
+		return model.Shipment{}, fmt.Errorf("%w: post-payment correction is allowed only after payment", ErrInvalidState)
+	}
+	oldStatus := shipment.ShipmentStatus
+	oldSnapshot := fmt.Sprintf("client=%s route=%s->%s qty=%d weight=%s dimensions=%s value=%s cost=%.2f receiver=%v/%v",
+		shipment.ClientName, shipment.FromStation, shipment.ToStation, shipment.QuantityPlaces, shipment.Weight, shipment.Dimensions, shipment.Value, shipment.Cost, shipment.ReceiverName, shipment.ReceiverPhone)
+	if req.ClientName != nil {
+		shipment.ClientName = *req.ClientName
+	}
+	if req.ClientEmail != nil {
+		shipment.ClientEmail = *req.ClientEmail
+	}
+	if req.FromStation != nil {
+		shipment.FromStation = *req.FromStation
+	}
+	if req.ToStation != nil {
+		shipment.ToStation = *req.ToStation
+	}
+	if req.Weight != nil {
+		shipment.Weight = *req.Weight
+	}
+	if req.Dimensions != nil {
+		shipment.Dimensions = *req.Dimensions
+	}
+	if req.Description != nil {
+		shipment.Description = *req.Description
+	}
+	if req.Value != nil {
+		shipment.Value = *req.Value
+	}
+	if req.Cost != nil {
+		shipment.Cost = *req.Cost
+	}
+	if req.QuantityPlaces != nil {
+		shipment.QuantityPlaces = *req.QuantityPlaces
+	}
+	if req.ReceiverName != nil {
+		shipment.ReceiverName = req.ReceiverName
+	}
+	if req.ReceiverPhone != nil {
+		shipment.ReceiverPhone = req.ReceiverPhone
+	}
+	if err := validateEditableShipment(shipment); err != nil {
+		return model.Shipment{}, err
+	}
+	shipment.Route = calculateRoute(shipment.FromStation, shipment.ToStation)
+	if len(shipment.Route) > 0 && (shipment.CurrentStation == "" || indexOf(shipment.Route, shipment.CurrentStation) == -1) {
+		shipment.CurrentStation = shipment.FromStation
+	}
+	if nextIndex := indexOf(shipment.Route, shipment.CurrentStation) + 1; nextIndex > 0 && nextIndex < len(shipment.Route) {
+		shipment.NextStation = &shipment.Route[nextIndex]
+	} else if shipment.CurrentStation == shipment.ToStation {
+		shipment.NextStation = nil
+	}
+	shipment.UpdatedAt = time.Now().UTC()
+	shipment.LastUpdatedAt = shipment.UpdatedAt
+	shipment, err = s.repo.UpdateShipment(ctx, shipment)
+	if err != nil {
+		return model.Shipment{}, err
+	}
+	newSnapshot := fmt.Sprintf("client=%s route=%s->%s qty=%d weight=%s dimensions=%s value=%s cost=%.2f receiver=%v/%v",
+		shipment.ClientName, shipment.FromStation, shipment.ToStation, shipment.QuantityPlaces, shipment.Weight, shipment.Dimensions, shipment.Value, shipment.Cost, shipment.ReceiverName, shipment.ReceiverPhone)
+	_ = s.repo.AddShipmentHistory(ctx, model.ShipmentHistory{
+		ShipmentID:   id,
+		Action:       "Post-payment correction",
+		OperatorID:   operatorID,
+		OperatorName: operatorName,
+		Details:      "Shipment corrected after payment",
+		OldStatus:    ptr(string(oldStatus)),
+		NewStatus:    ptr(string(shipment.ShipmentStatus)),
+		Reason:       &req.Reason,
+		CreatedAt:    shipment.UpdatedAt,
+	})
+	_ = s.repo.AddAuditLog(ctx, model.AuditLog{
+		ID:         uuid.NewString(),
+		UserID:     operatorID,
+		EntityType: "shipment",
+		EntityID:   id,
+		Action:     "POST_PAYMENT_CORRECTION",
+		OldValue:   &oldSnapshot,
+		NewValue:   &newSnapshot,
+		Reason:     &req.Reason,
+		CreatedAt:  shipment.UpdatedAt,
+	})
+	return shipment, nil
 }
 
 func (s *ShipmentService) ActionContext(ctx context.Context, id string, user *AuthenticatedUser) (model.ActionContext, error) {
@@ -385,4 +541,66 @@ func isAllowedTransition(current, next model.ShipmentLifecycle) bool {
 		}
 	}
 	return false
+}
+
+func validateCreateShipment(req CreateShipmentRequest) error {
+	switch {
+	case req.ClientID == "":
+		return fmt.Errorf("%w: client_id is required", ErrValidation)
+	case req.ClientName == "":
+		return fmt.Errorf("%w: client_name is required", ErrValidation)
+	case req.ClientEmail == "":
+		return fmt.Errorf("%w: client_email is required", ErrValidation)
+	case req.FromStation == "":
+		return fmt.Errorf("%w: from_station is required", ErrValidation)
+	case req.ToStation == "":
+		return fmt.Errorf("%w: to_station is required", ErrValidation)
+	case req.FromStation == req.ToStation:
+		return fmt.Errorf("%w: route must include different stations", ErrValidation)
+	case req.Weight == "":
+		return fmt.Errorf("%w: weight is required", ErrValidation)
+	case req.Dimensions == "":
+		return fmt.Errorf("%w: dimensions are required", ErrValidation)
+	case req.Description == "":
+		return fmt.Errorf("%w: description is required", ErrValidation)
+	case req.Value == "":
+		return fmt.Errorf("%w: declared value is required", ErrValidation)
+	case req.QuantityPlaces <= 0:
+		return fmt.Errorf("%w: quantity_places must be greater than zero", ErrValidation)
+	case req.ReceiverName == nil || *req.ReceiverName == "":
+		return fmt.Errorf("%w: receiver_name is required", ErrValidation)
+	case req.ReceiverPhone == nil || *req.ReceiverPhone == "":
+		return fmt.Errorf("%w: receiver_phone is required", ErrValidation)
+	}
+	return nil
+}
+
+func validateEditableShipment(shipment model.Shipment) error {
+	switch {
+	case shipment.ClientName == "":
+		return fmt.Errorf("%w: client_name is required", ErrValidation)
+	case shipment.ClientEmail == "":
+		return fmt.Errorf("%w: client_email is required", ErrValidation)
+	case shipment.FromStation == "":
+		return fmt.Errorf("%w: from_station is required", ErrValidation)
+	case shipment.ToStation == "":
+		return fmt.Errorf("%w: to_station is required", ErrValidation)
+	case shipment.FromStation == shipment.ToStation:
+		return fmt.Errorf("%w: route must include different stations", ErrValidation)
+	case shipment.Weight == "":
+		return fmt.Errorf("%w: weight is required", ErrValidation)
+	case shipment.Dimensions == "":
+		return fmt.Errorf("%w: dimensions are required", ErrValidation)
+	case shipment.Description == "":
+		return fmt.Errorf("%w: description is required", ErrValidation)
+	case shipment.Value == "":
+		return fmt.Errorf("%w: declared value is required", ErrValidation)
+	case shipment.QuantityPlaces <= 0:
+		return fmt.Errorf("%w: quantity_places must be greater than zero", ErrValidation)
+	case shipment.ReceiverName == nil || *shipment.ReceiverName == "":
+		return fmt.Errorf("%w: receiver_name is required", ErrValidation)
+	case shipment.ReceiverPhone == nil || *shipment.ReceiverPhone == "":
+		return fmt.Errorf("%w: receiver_phone is required", ErrValidation)
+	}
+	return nil
 }

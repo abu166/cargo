@@ -27,15 +27,25 @@ func (s *Server) handlePendingArrivals(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleArriveShipment(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleReceiver, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct {
-		CurrentStation string  `json:"current_station"`
-		OperatorID     *string `json:"operator_id"`
-		OperatorName   *string `json:"operator_name"`
+		CurrentStation string `json:"current_station"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	shipment, notification, err := s.services.Shipments.Arrive(r.Context(), chi.URLParam(r, "id"), req.CurrentStation, req.OperatorID, req.OperatorName)
+	if err := s.requireStation(user, req.CurrentStation); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	shipment, notification, err := s.services.Shipments.Arrive(r.Context(), chi.URLParam(r, "id"), req.CurrentStation, &user.ID, &user.Name)
 	if err != nil {
 		handleServiceError(w, err)
 		return
@@ -48,12 +58,24 @@ func (s *Server) handleArriveShipment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReadyForIssue(w http.ResponseWriter, r *http.Request) {
-	var operatorID, operatorName *string
-	if user := s.authenticatedUser(r); user != nil {
-		operatorID = &user.ID
-		operatorName = &user.Name
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
 	}
-	shipment, err := s.services.Shipments.ReadyForIssue(r.Context(), chi.URLParam(r, "id"), operatorID, operatorName)
+	if err := s.requireRole(user, model.RoleReceiver, model.RoleIssue, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	current, err := s.services.Shipments.Get(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	if err := s.requireStation(user, current.ToStation); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	shipment, err := s.services.Shipments.ReadyForIssue(r.Context(), chi.URLParam(r, "id"), &user.ID, &user.Name)
 	if err != nil {
 		handleServiceError(w, err)
 		return

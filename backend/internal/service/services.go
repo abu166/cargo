@@ -18,6 +18,7 @@ var (
 	ErrNotFound           = errors.New("not found")
 	ErrInvalidTransition  = errors.New("invalid status transition")
 	ErrInvalidState       = errors.New("invalid state")
+	ErrValidation         = errors.New("validation error")
 )
 
 type Services struct {

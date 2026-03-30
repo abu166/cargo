@@ -19,6 +19,14 @@ func (s *Server) mountUserRoutes(r chi.Router) {
 }
 
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	users, err := s.services.Admin.ListUsers(r.Context())
 	if err != nil {
 		handleServiceError(w, err)
@@ -28,6 +36,14 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(authUser, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct {
 		Name     string  `json:"name"`
 		Email    string  `json:"email"`
@@ -38,15 +54,23 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	user, err := s.services.Admin.CreateEmployee(r.Context(), req.Name, req.Email, req.Password, model.Role(req.Role), req.Station)
+	createdUser, err := s.services.Admin.CreateEmployee(r.Context(), req.Name, req.Email, req.Password, model.Role(req.Role), req.Station)
 	if err != nil {
 		handleServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, user)
+	writeJSON(w, http.StatusCreated, createdUser)
 }
 
 func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(authUser, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req model.User
 	if !decodeJSON(w, r, &req) {
 		return
@@ -55,15 +79,23 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	if req.ID == "" {
 		req.ID = uuid.NewString()
 	}
-	user, err := s.services.Admin.UpdateUser(r.Context(), req)
+	updatedUser, err := s.services.Admin.UpdateUser(r.Context(), req)
 	if err != nil {
 		handleServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, user)
+	writeJSON(w, http.StatusOK, updatedUser)
 }
 
 func (s *Server) handleListEmployees(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	users, err := s.services.Admin.ListEmployees(r.Context())
 	if err != nil {
 		handleServiceError(w, err)
@@ -81,6 +113,14 @@ func (s *Server) handleListEmployees(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateEmployee(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(authUser, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct {
 		Name     string  `json:"name"`
 		Email    string  `json:"email"`
@@ -91,23 +131,31 @@ func (s *Server) handleCreateEmployee(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	user, err := s.services.Admin.CreateEmployee(r.Context(), req.Name, req.Email, req.Password, model.Role(req.Role), req.Station)
+	createdUser, err := s.services.Admin.CreateEmployee(r.Context(), req.Name, req.Email, req.Password, model.Role(req.Role), req.Station)
 	if err != nil {
 		handleServiceError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":         user.ID,
-		"name":       user.Name,
-		"email":      user.Email,
-		"role":       user.Role,
-		"station":    user.Station,
-		"created_at": user.CreatedAt,
+		"id":         createdUser.ID,
+		"name":       createdUser.Name,
+		"email":      createdUser.Email,
+		"role":       createdUser.Role,
+		"station":    createdUser.Station,
+		"created_at": createdUser.CreatedAt,
 		"status":     "active",
 	})
 }
 
 func (s *Server) handleDeleteEmployee(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	if err := s.services.Admin.DeleteEmployee(r.Context(), chi.URLParam(r, "id")); err != nil {
 		handleServiceError(w, err)
 		return

@@ -35,6 +35,14 @@ func (s *Server) handleListStations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateStation(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var station model.Station
 	if !decodeJSON(w, r, &station) {
 		return
@@ -51,6 +59,14 @@ func (s *Server) handleCreateStation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateStation(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var station model.Station
 	if !decodeJSON(w, r, &station) {
 		return
