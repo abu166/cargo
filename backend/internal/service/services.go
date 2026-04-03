@@ -27,6 +27,7 @@ type Services struct {
 	Clients       *ClientService
 	Reference     *ReferenceService
 	Shipments     *ShipmentService
+	Delivery      *DeliveryService
 	Payments      *PaymentService
 	Tracking      *TrackingService
 	Notifications *NotificationService
@@ -35,12 +36,19 @@ type Services struct {
 }
 
 func NewServices(repo Repository, jwtSecret string) Services {
+	providerAdapters := map[model.ExternalDeliveryProvider]DeliveryProviderAdapter{
+		model.ProviderYandex:  NewStubDeliveryAdapter(model.ProviderYandex),
+		model.ProviderGlovo:   NewStubDeliveryAdapter(model.ProviderGlovo),
+		model.ProviderInDrive: NewStubDeliveryAdapter(model.ProviderInDrive),
+	}
+	deliverySvc := &DeliveryService{repo: repo, providers: providerAdapters}
 	return Services{
 		Auth:          &AuthService{repo: repo, jwtSecret: jwtSecret},
 		Admin:         &AdminService{repo: repo},
 		Clients:       &ClientService{repo: repo},
 		Reference:     &ReferenceService{repo: repo},
 		Shipments:     &ShipmentService{repo: repo},
+		Delivery:      deliverySvc,
 		Payments:      &PaymentService{repo: repo},
 		Tracking:      &TrackingService{repo: repo},
 		Notifications: &NotificationService{repo: repo},

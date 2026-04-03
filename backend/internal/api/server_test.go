@@ -47,20 +47,20 @@ func TestPilotLifecycleFlow(t *testing.T) {
 	receiverPhone := "+77010000000"
 
 	createResp := performJSON(t, server.Router(), "POST", "/api/shipments", map[string]any{
-		"client_id":      clientID,
-		"client_name":    "Client",
-		"client_email":   "client@test",
-		"from_station":   originStation,
-		"to_station":     destStation,
-		"departure_date": time.Now().UTC().Format(time.RFC3339),
-		"weight":         "25",
-		"dimensions":     "20x20x20",
-		"description":    "Laptop",
-		"value":          "150000",
-		"cost":           7000,
+		"client_id":       clientID,
+		"client_name":     "Client",
+		"client_email":    "client@test",
+		"from_station":    originStation,
+		"to_station":      destStation,
+		"departure_date":  time.Now().UTC().Format(time.RFC3339),
+		"weight":          "25",
+		"dimensions":      "20x20x20",
+		"description":     "Laptop",
+		"value":           "150000",
+		"cost":            7000,
 		"quantity_places": 1,
-		"receiver_name": receiverName,
-		"receiver_phone": receiverPhone,
+		"receiver_name":   receiverName,
+		"receiver_phone":  receiverPhone,
 	}, operatorToken)
 	var shipment model.Shipment
 	decodeResponse(t, createResp, &shipment)
@@ -80,8 +80,8 @@ func TestPilotLifecycleFlow(t *testing.T) {
 	}
 
 	paymentResp := performJSON(t, server.Router(), "POST", "/api/payments", map[string]any{
-		"shipment_id":   shipment.ID,
-		"amount":        5750,
+		"shipment_id":    shipment.ID,
+		"amount":         5750,
 		"payment_method": "POS",
 	}, operatorToken)
 	var payment model.Payment
@@ -141,15 +141,15 @@ func TestPilotLifecycleFlow(t *testing.T) {
 
 	scanResp := performJSON(t, server.Router(), "POST", "/api/scan", map[string]any{
 		"shipment_id": shipment.ID,
-		"event_type": "ISSUE_SCAN",
-		"station_id": destStation,
+		"event_type":  "ISSUE_SCAN",
+		"station_id":  destStation,
 	}, issueToken)
 	if scanResp.Code != http.StatusCreated {
 		t.Fatalf("issue scan failed: %d %s", scanResp.Code, scanResp.Body.String())
 	}
 
 	issueResp := performJSON(t, server.Router(), "POST", "/api/shipments/"+shipment.ID+"/issue", map[string]any{
-		"receiver_name": receiverName,
+		"receiver_name":  receiverName,
 		"receiver_phone": receiverPhone,
 	}, issueToken)
 	decodeResponse(t, issueResp, &shipment)
@@ -171,20 +171,20 @@ func TestTrackingAndReportsEndpoints(t *testing.T) {
 	accountingToken := createEmployeeAndLogin(t, server, services, "Accounting", "accounting@test", "secret123", model.RoleAccounting, nil)
 
 	shipment, err := services.Shipments.Create(context.Background(), service.CreateShipmentRequest{
-		ClientID:      "client-1",
-		ClientName:    "Client",
-		ClientEmail:   "client@test",
-		FromStation:   "Алматы-1",
-		ToStation:     "Ақтөбе",
-		DepartureDate: time.Now().UTC(),
-		Weight:        "10",
-		Dimensions:    "10x10x10",
-		Description:   "Box",
-		Value:         "1000",
-		Cost:          5000,
+		ClientID:       "client-1",
+		ClientName:     "Client",
+		ClientEmail:    "client@test",
+		FromStation:    "Алматы-1",
+		ToStation:      "Ақтөбе",
+		DepartureDate:  time.Now().UTC(),
+		Weight:         "10",
+		Dimensions:     "10x10x10",
+		Description:    "Box",
+		Value:          "1000",
+		Cost:           5000,
 		QuantityPlaces: 1,
-		ReceiverName: strPtr("Receiver"),
-		ReceiverPhone: strPtr("+77010000001"),
+		ReceiverName:   strPtr("Receiver"),
+		ReceiverPhone:  strPtr("+77010000001"),
 	})
 	if err != nil {
 		t.Fatalf("create shipment: %v", err)
@@ -218,6 +218,91 @@ func TestTrackingAndReportsEndpoints(t *testing.T) {
 	server.Router().ServeHTTP(reportResp, reportReq)
 	if reportResp.Code != http.StatusOK {
 		t.Fatalf("status summary failed: %d %s", reportResp.Code, reportResp.Body.String())
+	}
+}
+
+func TestExternalDeliveryFlow(t *testing.T) {
+	repo := newMemoryRepo()
+	services := service.NewServices(repo, "test-secret")
+	server, err := NewServer(config.Config{Port: "8080", JWTSecret: "test-secret"}, services)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	operatorStation := "Алматы-1"
+	operatorToken := createEmployeeAndLogin(t, server, services, "Origin Operator", "operator2@test", "secret123", model.RoleOperator, &operatorStation)
+
+	shipment, err := services.Shipments.Create(context.Background(), service.CreateShipmentRequest{
+		ClientID:       "client-1",
+		ClientName:     "Client",
+		ClientEmail:    "client@test",
+		FromStation:    "Алматы-1",
+		ToStation:      "Ақтөбе",
+		DepartureDate:  time.Now().UTC(),
+		Weight:         "8",
+		Dimensions:     "10x10x10",
+		Description:    "Box",
+		Value:          "1000",
+		Cost:           5000,
+		QuantityPlaces: 1,
+		ReceiverName:   strPtr("Receiver"),
+		ReceiverPhone:  strPtr("+77010000001"),
+	})
+	if err != nil {
+		t.Fatalf("create shipment: %v", err)
+	}
+
+	quoteResp := performJSON(t, server.Router(), "POST", "/api/shipments/"+shipment.ID+"/delivery/quote", map[string]any{
+		"delivery_mode": "COURIER_PICKUP",
+		"providers":     []string{"YANDEX", "INDRIVE"},
+		"pickup_details": map[string]any{
+			"contact_name":  "Client",
+			"contact_phone": "+77017777777",
+			"address_line":  "Almaty, Abay 10",
+		},
+	}, operatorToken)
+	if quoteResp.Code != http.StatusOK {
+		t.Fatalf("delivery quote failed: %d %s", quoteResp.Code, quoteResp.Body.String())
+	}
+	var quoteBody struct {
+		Quotes []model.ExternalDeliveryQuote `json:"quotes"`
+	}
+	decodeResponse(t, quoteResp, &quoteBody)
+	if len(quoteBody.Quotes) == 0 {
+		t.Fatalf("expected non-empty quotes")
+	}
+
+	createOrderResp := performJSON(t, server.Router(), "POST", "/api/shipments/"+shipment.ID+"/delivery/order", map[string]any{
+		"provider":      "YANDEX",
+		"delivery_mode": "COURIER_PICKUP",
+		"quoted_price":  quoteBody.Quotes[0].Price,
+		"currency":      "KZT",
+		"pickup_details": map[string]any{
+			"contact_name":  "Client",
+			"contact_phone": "+77017777777",
+			"address_line":  "Almaty, Abay 10",
+		},
+	}, operatorToken)
+	if createOrderResp.Code != http.StatusOK {
+		t.Fatalf("delivery create order failed: %d %s", createOrderResp.Code, createOrderResp.Body.String())
+	}
+	var createOrderBody struct {
+		Shipment model.Shipment              `json:"shipment"`
+		Order    model.ExternalDeliveryOrder `json:"external_delivery_order"`
+	}
+	decodeResponse(t, createOrderResp, &createOrderBody)
+	if createOrderBody.Order.ExternalOrderID == nil || *createOrderBody.Order.ExternalOrderID == "" {
+		t.Fatalf("expected external order id")
+	}
+
+	webhookResp := performJSON(t, server.Router(), "POST", "/api/delivery/webhook/yandex", map[string]any{
+		"events": []map[string]any{{
+			"external_order_id": *createOrderBody.Order.ExternalOrderID,
+			"status":            "DELIVERED",
+		}},
+	}, "")
+	if webhookResp.Code != http.StatusOK {
+		t.Fatalf("delivery webhook failed: %d %s", webhookResp.Code, webhookResp.Body.String())
 	}
 }
 

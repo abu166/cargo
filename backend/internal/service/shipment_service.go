@@ -81,6 +81,11 @@ func (s *ShipmentService) Create(ctx context.Context, req CreateShipmentRequest)
 		Description:     req.Description,
 		Value:           req.Value,
 		Cost:            req.Cost,
+		BaseTariff:      req.Cost,
+		FirstMileTariff: 0,
+		LastMileTariff:  0,
+		TotalTariff:     req.Cost,
+		DeliveryMode:    model.DeliveryModeSelfDropOff,
 		QuantityPlaces:  req.QuantityPlaces,
 		ReceiverName:    req.ReceiverName,
 		ReceiverPhone:   req.ReceiverPhone,
@@ -159,6 +164,8 @@ func (s *ShipmentService) CalculateTariff(ctx context.Context, id string) (model
 		}
 	}
 	shipment.Cost = 5000 + weightSurcharge
+	shipment.BaseTariff = shipment.Cost
+	shipment.TotalTariff = shipment.BaseTariff + shipment.FirstMileTariff + shipment.LastMileTariff
 	shipment.UpdatedAt = time.Now().UTC()
 	shipment.LastUpdatedAt = shipment.UpdatedAt
 	return s.repo.UpdateShipment(ctx, shipment)

@@ -45,6 +45,58 @@ const (
 	PaymentFailed    PaymentStatus = "FAILED"
 )
 
+type DeliveryMode string
+
+const (
+	DeliveryModeSelfDropOff   DeliveryMode = "SELF_DROP_OFF"
+	DeliveryModeCourierPickup DeliveryMode = "COURIER_PICKUP"
+	DeliveryModeHybrid        DeliveryMode = "HYBRID"
+)
+
+type ExternalDeliveryProvider string
+
+const (
+	ProviderYandex  ExternalDeliveryProvider = "YANDEX"
+	ProviderGlovo   ExternalDeliveryProvider = "GLOVO"
+	ProviderInDrive ExternalDeliveryProvider = "INDRIVE"
+)
+
+type ExternalDeliveryStatus string
+
+const (
+	ExternalDeliveryStatusDraft     ExternalDeliveryStatus = "DRAFT"
+	ExternalDeliveryStatusQuoted    ExternalDeliveryStatus = "QUOTED"
+	ExternalDeliveryStatusCreated   ExternalDeliveryStatus = "CREATED"
+	ExternalDeliveryStatusAssigned  ExternalDeliveryStatus = "ASSIGNED"
+	ExternalDeliveryStatusPickedUp  ExternalDeliveryStatus = "PICKED_UP"
+	ExternalDeliveryStatusDelivered ExternalDeliveryStatus = "DELIVERED"
+	ExternalDeliveryStatusCancelled ExternalDeliveryStatus = "CANCELLED"
+	ExternalDeliveryStatusFailed    ExternalDeliveryStatus = "FAILED"
+)
+
+type DeliveryPointDetails struct {
+	ContactName    string     `json:"contact_name"`
+	ContactPhone   string     `json:"contact_phone"`
+	AddressLine    string     `json:"address_line"`
+	AddressLine2   *string    `json:"address_line_2,omitempty"`
+	Latitude       *float64   `json:"latitude,omitempty"`
+	Longitude      *float64   `json:"longitude,omitempty"`
+	Comment        *string    `json:"comment,omitempty"`
+	TimeWindowFrom *time.Time `json:"time_window_from,omitempty"`
+	TimeWindowTo   *time.Time `json:"time_window_to,omitempty"`
+}
+
+type ExternalDeliveryQuote struct {
+	Provider     ExternalDeliveryProvider `json:"provider"`
+	Price        float64                  `json:"price"`
+	Currency     string                   `json:"currency"`
+	ETASeconds   int                      `json:"eta_seconds"`
+	ServiceLevel string                   `json:"service_level"`
+	QuotationID  string                   `json:"quotation_id"`
+	RawPayload   *string                  `json:"raw_payload,omitempty"`
+	CalculatedAt time.Time                `json:"calculated_at"`
+}
+
 type User struct {
 	ID             string    `json:"id"`
 	Name           string    `json:"name"`
@@ -75,36 +127,61 @@ type Station struct {
 }
 
 type Shipment struct {
-	ID               string            `json:"id"`
-	ShipmentNumber   string            `json:"shipment_number"`
-	ClientID         string            `json:"client_id"`
-	ClientName       string            `json:"client_name"`
-	ClientEmail      string            `json:"client_email"`
-	FromStation      string            `json:"from_station"`
-	ToStation        string            `json:"to_station"`
-	CurrentStation   string            `json:"current_station"`
-	NextStation      *string           `json:"next_station"`
-	Route            []string          `json:"route"`
-	Status           string            `json:"status"`
-	ShipmentStatus   ShipmentLifecycle `json:"shipment_status"`
-	PaymentStatus    PaymentStatus     `json:"payment_status"`
-	DepartureDate    time.Time         `json:"departure_date"`
-	Weight           string            `json:"weight"`
-	Dimensions       string            `json:"dimensions"`
-	Description      string            `json:"description"`
-	Value            string            `json:"value"`
-	Cost             float64           `json:"cost"`
-	QuantityPlaces   int               `json:"quantity_places"`
-	ReceiverName     *string           `json:"receiver_name,omitempty"`
-	ReceiverPhone    *string           `json:"receiver_phone,omitempty"`
-	TrainTime        *string           `json:"train_time,omitempty"`
-	TrackingCode     *string           `json:"tracking_code,omitempty"`
-	QRCodeID         *string           `json:"qr_code_id,omitempty"`
-	TransportUnitID  *string           `json:"transport_unit_id,omitempty"`
-	LastUpdatedAt    time.Time         `json:"last_updated_at"`
-	CreatedBy        *string           `json:"created_by,omitempty"`
-	CreatedAt        time.Time         `json:"created_at"`
-	UpdatedAt        time.Time         `json:"updated_at"`
+	ID              string                `json:"id"`
+	ShipmentNumber  string                `json:"shipment_number"`
+	ClientID        string                `json:"client_id"`
+	ClientName      string                `json:"client_name"`
+	ClientEmail     string                `json:"client_email"`
+	FromStation     string                `json:"from_station"`
+	ToStation       string                `json:"to_station"`
+	CurrentStation  string                `json:"current_station"`
+	NextStation     *string               `json:"next_station"`
+	Route           []string              `json:"route"`
+	Status          string                `json:"status"`
+	ShipmentStatus  ShipmentLifecycle     `json:"shipment_status"`
+	PaymentStatus   PaymentStatus         `json:"payment_status"`
+	DepartureDate   time.Time             `json:"departure_date"`
+	Weight          string                `json:"weight"`
+	Dimensions      string                `json:"dimensions"`
+	Description     string                `json:"description"`
+	Value           string                `json:"value"`
+	Cost            float64               `json:"cost"`
+	BaseTariff      float64               `json:"base_tariff"`
+	FirstMileTariff float64               `json:"first_mile_tariff"`
+	LastMileTariff  float64               `json:"last_mile_tariff"`
+	TotalTariff     float64               `json:"total_tariff"`
+	DeliveryMode    DeliveryMode          `json:"delivery_mode"`
+	QuantityPlaces  int                   `json:"quantity_places"`
+	PickupDetails   *DeliveryPointDetails `json:"pickup_details,omitempty"`
+	DropoffDetails  *DeliveryPointDetails `json:"dropoff_details,omitempty"`
+	ReceiverName    *string               `json:"receiver_name,omitempty"`
+	ReceiverPhone   *string               `json:"receiver_phone,omitempty"`
+	TrainTime       *string               `json:"train_time,omitempty"`
+	TrackingCode    *string               `json:"tracking_code,omitempty"`
+	QRCodeID        *string               `json:"qr_code_id,omitempty"`
+	TransportUnitID *string               `json:"transport_unit_id,omitempty"`
+	LastUpdatedAt   time.Time             `json:"last_updated_at"`
+	CreatedBy       *string               `json:"created_by,omitempty"`
+	CreatedAt       time.Time             `json:"created_at"`
+	UpdatedAt       time.Time             `json:"updated_at"`
+}
+
+type ExternalDeliveryOrder struct {
+	ID              string                   `json:"id"`
+	ShipmentID      string                   `json:"shipment_id"`
+	Provider        ExternalDeliveryProvider `json:"provider"`
+	Status          ExternalDeliveryStatus   `json:"status"`
+	ExternalOrderID *string                  `json:"external_order_id,omitempty"`
+	QuotedPrice     float64                  `json:"quoted_price"`
+	FinalPrice      *float64                 `json:"final_price,omitempty"`
+	Currency        string                   `json:"currency"`
+	TrackingURL     *string                  `json:"tracking_url,omitempty"`
+	IdempotencyKey  string                   `json:"idempotency_key"`
+	RequestPayload  *string                  `json:"request_payload,omitempty"`
+	ResponsePayload *string                  `json:"response_payload,omitempty"`
+	LastError       *string                  `json:"last_error,omitempty"`
+	CreatedAt       time.Time                `json:"created_at"`
+	UpdatedAt       time.Time                `json:"updated_at"`
 }
 
 type ShipmentHistory struct {
@@ -142,26 +219,26 @@ type QRCode struct {
 }
 
 type ScanEvent struct {
-	ID              string     `json:"id"`
-	ShipmentID      string     `json:"shipment_id"`
-	QRCodeID        *string    `json:"qr_code_id,omitempty"`
-	EventType       string     `json:"event_type"`
-	StationID       *string    `json:"station_id,omitempty"`
-	TransportUnitID *string    `json:"transport_unit_id,omitempty"`
-	UserID          *string    `json:"user_id,omitempty"`
-	OldStatus       *string    `json:"old_status,omitempty"`
-	NewStatus       *string    `json:"new_status,omitempty"`
-	Comment         *string    `json:"comment,omitempty"`
-	ScannedAt       time.Time  `json:"scanned_at"`
+	ID              string    `json:"id"`
+	ShipmentID      string    `json:"shipment_id"`
+	QRCodeID        *string   `json:"qr_code_id,omitempty"`
+	EventType       string    `json:"event_type"`
+	StationID       *string   `json:"station_id,omitempty"`
+	TransportUnitID *string   `json:"transport_unit_id,omitempty"`
+	UserID          *string   `json:"user_id,omitempty"`
+	OldStatus       *string   `json:"old_status,omitempty"`
+	NewStatus       *string   `json:"new_status,omitempty"`
+	Comment         *string   `json:"comment,omitempty"`
+	ScannedAt       time.Time `json:"scanned_at"`
 }
 
 type TransitEvent struct {
-	ID         string     `json:"id"`
-	ShipmentID string     `json:"shipment_id"`
-	StationID  string     `json:"station_id"`
-	UserID     *string    `json:"user_id,omitempty"`
-	EventTime  time.Time  `json:"event_time"`
-	Comment    *string    `json:"comment,omitempty"`
+	ID         string    `json:"id"`
+	ShipmentID string    `json:"shipment_id"`
+	StationID  string    `json:"station_id"`
+	UserID     *string   `json:"user_id,omitempty"`
+	EventTime  time.Time `json:"event_time"`
+	Comment    *string   `json:"comment,omitempty"`
 }
 
 type ArrivalEvent struct {
@@ -184,16 +261,16 @@ type Notification struct {
 }
 
 type AuditLog struct {
-	ID         string     `json:"id"`
-	UserID     *string    `json:"user_id,omitempty"`
-	EntityType string     `json:"entity_type"`
-	EntityID   string     `json:"entity_id"`
-	Action     string     `json:"action"`
-	OldValue   *string    `json:"old_value,omitempty"`
-	NewValue   *string    `json:"new_value,omitempty"`
-	StationID  *string    `json:"station_id,omitempty"`
-	Reason     *string    `json:"reason,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID         string    `json:"id"`
+	UserID     *string   `json:"user_id,omitempty"`
+	EntityType string    `json:"entity_type"`
+	EntityID   string    `json:"entity_id"`
+	Action     string    `json:"action"`
+	OldValue   *string   `json:"old_value,omitempty"`
+	NewValue   *string   `json:"new_value,omitempty"`
+	StationID  *string   `json:"station_id,omitempty"`
+	Reason     *string   `json:"reason,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type RouteRevenue struct {

@@ -64,6 +64,7 @@ func (s *Server) routes() chi.Router {
 		s.mountReferenceRoutes(api)
 		s.mountClientRoutes(api)
 		s.mountShipmentRoutes(api)
+		s.mountDeliveryRoutes(api)
 		s.mountPaymentRoutes(api)
 		s.mountTrackingRoutes(api)
 		s.mountTransitRoutes(api)
