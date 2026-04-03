@@ -38,6 +38,24 @@ export PORT="8080"
 go run ./cmd/server
 ```
 
+## HTTPS with Let's Encrypt
+
+Set these environment variables to enable automatic certificates:
+
+```bash
+export LETSENCRYPT_ENABLED="true"
+export LETSENCRYPT_EMAIL="ops@example.com"
+export LETSENCRYPT_DOMAINS="api.example.com"
+export LETSENCRYPT_HTTP_ADDR=":80"
+export TLS_ADDR=":443"
+```
+
+Notes:
+
+- `LETSENCRYPT_DOMAINS` accepts comma-separated values.
+- Port `80` must be reachable from the internet for ACME HTTP-01 challenge.
+- Certificates are cached in `LETSENCRYPT_CACHE_DIR` (default `/tmp/autocert-cache`).
+
 ## Test
 
 ```bash
