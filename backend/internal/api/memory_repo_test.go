@@ -11,29 +11,31 @@ import (
 )
 
 type memoryRepo struct {
-	mu            sync.Mutex
-	users         map[string]model.User
-	roles         []model.RoleRecord
-	stations      map[string]model.Station
-	shipments     map[string]model.Shipment
-	payments      map[string]model.Payment
-	qrCodes       map[string]model.QRCode
-	scanEvents    []model.ScanEvent
-	transitEvents []model.TransitEvent
-	arrivalEvents []model.ArrivalEvent
-	history       []model.ShipmentHistory
-	notifications []model.Notification
-	auditLogs     []model.AuditLog
-	nextNotifID   int64
+	mu             sync.Mutex
+	users          map[string]model.User
+	roles          []model.RoleRecord
+	stations       map[string]model.Station
+	shipments      map[string]model.Shipment
+	externalOrders map[string]model.ExternalDeliveryOrder
+	payments       map[string]model.Payment
+	qrCodes        map[string]model.QRCode
+	scanEvents     []model.ScanEvent
+	transitEvents  []model.TransitEvent
+	arrivalEvents  []model.ArrivalEvent
+	history        []model.ShipmentHistory
+	notifications  []model.Notification
+	auditLogs      []model.AuditLog
+	nextNotifID    int64
 }
 
 func newMemoryRepo() *memoryRepo {
 	return &memoryRepo{
-		users:     map[string]model.User{},
-		stations:  map[string]model.Station{},
-		shipments: map[string]model.Shipment{},
-		payments:  map[string]model.Payment{},
-		qrCodes:   map[string]model.QRCode{},
+		users:          map[string]model.User{},
+		stations:       map[string]model.Station{},
+		shipments:      map[string]model.Shipment{},
+		externalOrders: map[string]model.ExternalDeliveryOrder{},
+		payments:       map[string]model.Payment{},
+		qrCodes:        map[string]model.QRCode{},
 		roles: []model.RoleRecord{
 			{ID: "admin", Name: "admin", Description: "Administrator"},
 			{ID: "operator", Name: "operator", Description: "Operator"},
@@ -238,6 +240,53 @@ func (m *memoryRepo) UpdateShipment(_ context.Context, shipment model.Shipment) 
 	defer m.mu.Unlock()
 	m.shipments[shipment.ID] = shipment
 	return shipment, nil
+}
+
+func (m *memoryRepo) CreateExternalDeliveryOrder(_ context.Context, order model.ExternalDeliveryOrder) (model.ExternalDeliveryOrder, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.externalOrders[order.ID] = order
+	return order, nil
+}
+
+func (m *memoryRepo) UpdateExternalDeliveryOrder(_ context.Context, order model.ExternalDeliveryOrder) (model.ExternalDeliveryOrder, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.externalOrders[order.ID] = order
+	return order, nil
+}
+
+func (m *memoryRepo) GetExternalDeliveryOrderByID(_ context.Context, id string) (model.ExternalDeliveryOrder, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	item, ok := m.externalOrders[id]
+	if !ok {
+		return model.ExternalDeliveryOrder{}, service.ErrNotFound
+	}
+	return item, nil
+}
+
+func (m *memoryRepo) GetExternalDeliveryOrderByExternalID(_ context.Context, provider model.ExternalDeliveryProvider, externalOrderID string) (model.ExternalDeliveryOrder, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, item := range m.externalOrders {
+		if item.Provider == provider && item.ExternalOrderID != nil && *item.ExternalOrderID == externalOrderID {
+			return item, nil
+		}
+	}
+	return model.ExternalDeliveryOrder{}, service.ErrNotFound
+}
+
+func (m *memoryRepo) ListExternalDeliveryOrdersByShipment(_ context.Context, shipmentID string) ([]model.ExternalDeliveryOrder, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var items []model.ExternalDeliveryOrder
+	for _, item := range m.externalOrders {
+		if item.ShipmentID == shipmentID {
+			items = append(items, item)
+		}
+	}
+	return items, nil
 }
 
 func (m *memoryRepo) AddShipmentHistory(_ context.Context, history model.ShipmentHistory) error {

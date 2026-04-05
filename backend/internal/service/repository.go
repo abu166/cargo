@@ -29,6 +29,11 @@ type Repository interface {
 	ListShipments(ctx context.Context, filter model.ShipmentFilter) ([]model.Shipment, error)
 	ListShipmentsByOriginStation(ctx context.Context, station string) ([]model.Shipment, error)
 	UpdateShipment(ctx context.Context, shipment model.Shipment) (model.Shipment, error)
+	CreateExternalDeliveryOrder(ctx context.Context, order model.ExternalDeliveryOrder) (model.ExternalDeliveryOrder, error)
+	UpdateExternalDeliveryOrder(ctx context.Context, order model.ExternalDeliveryOrder) (model.ExternalDeliveryOrder, error)
+	GetExternalDeliveryOrderByID(ctx context.Context, id string) (model.ExternalDeliveryOrder, error)
+	GetExternalDeliveryOrderByExternalID(ctx context.Context, provider model.ExternalDeliveryProvider, externalOrderID string) (model.ExternalDeliveryOrder, error)
+	ListExternalDeliveryOrdersByShipment(ctx context.Context, shipmentID string) ([]model.ExternalDeliveryOrder, error)
 	AddShipmentHistory(ctx context.Context, history model.ShipmentHistory) error
 	ListShipmentHistory(ctx context.Context, shipmentID string) ([]model.ShipmentHistory, error)
 

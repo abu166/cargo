@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 
+	"cargo/backend/internal/model"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -22,6 +24,14 @@ func (s *Server) handleListCorporateClients(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) handleCreateCorporateClient(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(authUser, model.RoleOperator, model.RoleManager, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct {
 		Name     string  `json:"name"`
 		Email    string  `json:"email"`
@@ -34,12 +44,12 @@ func (s *Server) handleCreateCorporateClient(w http.ResponseWriter, r *http.Requ
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	user, err := s.services.Clients.CreateCorporateClient(r.Context(), req.Name, req.Email, req.Password, req.Company, req.BIN, req.Phone, req.Deposit)
+	createdUser, err := s.services.Clients.CreateCorporateClient(r.Context(), req.Name, req.Email, req.Password, req.Company, req.BIN, req.Phone, req.Deposit)
 	if err != nil {
 		handleServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"message": "Client created successfully", "clientId": user.ID})
+	writeJSON(w, http.StatusCreated, map[string]any{"message": "Client created successfully", "clientId": createdUser.ID})
 }
 
 func (s *Server) handleGetClient(w http.ResponseWriter, r *http.Request) {

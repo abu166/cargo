@@ -28,6 +28,14 @@ func (s *Server) mountShipmentRoutes(r chi.Router) {
 }
 
 func (s *Server) handleCreateShipment(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleOperator, model.RoleManager, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct {
 		ClientID       string   `json:"client_id"`
 		ClientName     string   `json:"client_name"`
@@ -48,15 +56,15 @@ func (s *Server) handleCreateShipment(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	if err := s.requireStation(user, req.FromStation); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	departure := time.Now().UTC()
 	if req.DepartureDate != "" {
 		if parsed, err := time.Parse(time.RFC3339, req.DepartureDate); err == nil {
 			departure = parsed
 		}
-	}
-	var createdBy *string
-	if user := s.authenticatedUser(r); user != nil {
-		createdBy = &user.ID
 	}
 	shipment, err := s.services.Shipments.Create(r.Context(), service.CreateShipmentRequest{
 		ClientID:       req.ClientID,
@@ -74,7 +82,7 @@ func (s *Server) handleCreateShipment(w http.ResponseWriter, r *http.Request) {
 		ReceiverName:   req.ReceiverName,
 		ReceiverPhone:  req.ReceiverPhone,
 		TrainTime:      req.TrainTime,
-		CreatedBy:      createdBy,
+		CreatedBy:      &user.ID,
 	})
 	if err != nil {
 		handleServiceError(w, err)
@@ -138,6 +146,23 @@ func (s *Server) handleUpdateShipment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCalculateTariff(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleOperator, model.RoleManager, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	current, err := s.services.Shipments.Get(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	if err := s.requireStation(user, current.FromStation); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	shipment, err := s.services.Shipments.CalculateTariff(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
 		handleServiceError(w, err)
@@ -147,6 +172,23 @@ func (s *Server) handleCalculateTariff(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSendToPayment(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleOperator, model.RoleManager, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	current, err := s.services.Shipments.Get(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	if err := s.requireStation(user, current.FromStation); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	shipment, err := s.services.Shipments.SendToPayment(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
 		handleServiceError(w, err)
@@ -156,6 +198,23 @@ func (s *Server) handleSendToPayment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGenerateQR(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleOperator, model.RoleManager, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	current, err := s.services.Shipments.Get(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	if err := s.requireStation(user, current.FromStation); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	log.Printf("generate_qr shipment_id=%s", chi.URLParam(r, "id"))
 	code, shipment, err := s.services.Tracking.GenerateQRCode(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
@@ -168,16 +227,28 @@ func (s *Server) handleGenerateQR(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCancelShipment(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleOperator, model.RoleManager, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct{ Reason *string `json:"reason"` }
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	var operatorID, operatorName *string
-	if user := s.authenticatedUser(r); user != nil {
-		operatorID = &user.ID
-		operatorName = &user.Name
+	current, err := s.services.Shipments.Get(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		handleServiceError(w, err)
+		return
 	}
-	shipment, err := s.services.Shipments.Cancel(r.Context(), chi.URLParam(r, "id"), operatorID, operatorName, req.Reason)
+	if err := s.requireStation(user, current.FromStation); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	shipment, err := s.services.Shipments.Cancel(r.Context(), chi.URLParam(r, "id"), &user.ID, &user.Name, req.Reason)
 	if err != nil {
 		handleServiceError(w, err)
 		return
@@ -186,16 +257,19 @@ func (s *Server) handleCancelShipment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleHoldShipment(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleAdmin, model.RoleManager); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct{ Reason *string `json:"reason"` }
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	var operatorID, operatorName *string
-	if user := s.authenticatedUser(r); user != nil {
-		operatorID = &user.ID
-		operatorName = &user.Name
-	}
-	shipment, err := s.services.Shipments.Hold(r.Context(), chi.URLParam(r, "id"), operatorID, operatorName, req.Reason)
+	shipment, err := s.services.Shipments.Hold(r.Context(), chi.URLParam(r, "id"), &user.ID, &user.Name, req.Reason)
 	if err != nil {
 		handleServiceError(w, err)
 		return
@@ -204,20 +278,68 @@ func (s *Server) handleHoldShipment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCorrectionRequest(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusAccepted, map[string]string{"message": "Correction request recorded"})
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	var req struct {
+		ClientName     *string  `json:"client_name"`
+		ClientEmail    *string  `json:"client_email"`
+		FromStation    *string  `json:"from_station"`
+		ToStation      *string  `json:"to_station"`
+		Weight         *string  `json:"weight"`
+		Dimensions     *string  `json:"dimensions"`
+		Description    *string  `json:"description"`
+		Value          *string  `json:"value"`
+		Cost           *float64 `json:"cost"`
+		QuantityPlaces *int     `json:"quantity_places"`
+		ReceiverName   *string  `json:"receiver_name"`
+		ReceiverPhone  *string  `json:"receiver_phone"`
+		Reason         string   `json:"reason"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	shipment, err := s.services.Shipments.CorrectAfterPayment(r.Context(), chi.URLParam(r, "id"), &user.ID, &user.Name, service.CorrectionRequest{
+		ClientName:     req.ClientName,
+		ClientEmail:    req.ClientEmail,
+		FromStation:    req.FromStation,
+		ToStation:      req.ToStation,
+		Weight:         req.Weight,
+		Dimensions:     req.Dimensions,
+		Description:    req.Description,
+		Value:          req.Value,
+		Cost:           req.Cost,
+		QuantityPlaces: req.QuantityPlaces,
+		ReceiverName:   req.ReceiverName,
+		ReceiverPhone:  req.ReceiverPhone,
+		Reason:         req.Reason,
+	})
+	if err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, shipment)
 }
 
 func (s *Server) handleDamageReport(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleAdmin, model.RoleManager, model.RoleTransit, model.RoleLoading, model.RoleReceiver, model.RoleIssue); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct{ Reason *string `json:"reason"` }
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	var operatorID, operatorName *string
-	if user := s.authenticatedUser(r); user != nil {
-		operatorID = &user.ID
-		operatorName = &user.Name
-	}
-	shipment, err := s.services.Shipments.Damage(r.Context(), chi.URLParam(r, "id"), operatorID, operatorName, req.Reason)
+	shipment, err := s.services.Shipments.Damage(r.Context(), chi.URLParam(r, "id"), &user.ID, &user.Name, req.Reason)
 	if err != nil {
 		handleServiceError(w, err)
 		return

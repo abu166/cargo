@@ -64,6 +64,7 @@ func (s *Server) routes() chi.Router {
 		s.mountReferenceRoutes(api)
 		s.mountClientRoutes(api)
 		s.mountShipmentRoutes(api)
+		s.mountDeliveryRoutes(api)
 		s.mountPaymentRoutes(api)
 		s.mountTrackingRoutes(api)
 		s.mountTransitRoutes(api)
@@ -143,11 +144,50 @@ func handleServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "Not found")
 	case errors.Is(err, service.ErrInvalidTransition):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrInvalidState):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrValidation):
+		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrForbidden):
 		writeError(w, http.StatusForbidden, "Forbidden")
+	case errors.Is(err, service.ErrUnauthorized):
+		writeError(w, http.StatusUnauthorized, "Authentication required")
 	default:
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 	}
+}
+
+func (s *Server) mustAuth(w http.ResponseWriter, r *http.Request) (*service.AuthenticatedUser, bool) {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		writeError(w, http.StatusUnauthorized, "Authentication required")
+		return nil, false
+	}
+	user, err := s.services.Auth.ParseToken(strings.TrimPrefix(authHeader, "Bearer "))
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "Invalid token")
+		return nil, false
+	}
+	return &user, true
+}
+
+func (s *Server) requireRole(user *service.AuthenticatedUser, roles ...model.Role) error {
+	for _, role := range roles {
+		if user.Role == role {
+			return nil
+		}
+	}
+	return service.ErrForbidden
+}
+
+func (s *Server) requireStation(user *service.AuthenticatedUser, station string) error {
+	if user.Role == model.RoleAdmin || user.Role == model.RoleManager {
+		return nil
+	}
+	if user.Station == "" || user.Station != station {
+		return service.ErrForbidden
+	}
+	return nil
 }
 
 type statusWriter struct {

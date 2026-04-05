@@ -452,17 +452,21 @@ func (r *Repository) UpdateStation(ctx context.Context, station model.Station) (
 
 func (r *Repository) CreateShipment(ctx context.Context, shipment model.Shipment) (model.Shipment, error) {
 	routeJSON, _ := json.Marshal(shipment.Route)
+	pickupDetailsJSON, _ := json.Marshal(shipment.PickupDetails)
+	dropoffDetailsJSON, _ := json.Marshal(shipment.DropoffDetails)
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO shipments (
 			id, shipment_number, client_id, client_name, client_email, from_station, to_station, current_station, next_station, route,
-			status, shipment_status, payment_status, departure_date, weight, dimensions, description, value, cost, quantity_places,
-			receiver_name, receiver_phone, train_time, tracking_code, qr_code_id, transport_unit_id, last_updated_at, created_by, created_at, updated_at
+			status, shipment_status, payment_status, departure_date, weight, dimensions, description, value, cost, base_tariff, first_mile_tariff,
+			last_mile_tariff, total_tariff, delivery_mode, quantity_places, pickup_details, dropoff_details, receiver_name, receiver_phone, train_time,
+			tracking_code, qr_code_id, transport_unit_id, last_updated_at, created_by, created_at, updated_at
 		) VALUES (
 			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-			$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-			$21,$22,$23,$24,$25,$26,$27,$28,$29,$30
+			$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+			$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,
+			$32,$33,$34,$35,$36,$37,$38,$39
 		)
-	`, shipment.ID, shipment.ShipmentNumber, shipment.ClientID, shipment.ClientName, shipment.ClientEmail, shipment.FromStation, shipment.ToStation, shipment.CurrentStation, shipment.NextStation, routeJSON, shipment.Status, shipment.ShipmentStatus, shipment.PaymentStatus, shipment.DepartureDate, shipment.Weight, shipment.Dimensions, shipment.Description, shipment.Value, shipment.Cost, shipment.QuantityPlaces, shipment.ReceiverName, shipment.ReceiverPhone, shipment.TrainTime, shipment.TrackingCode, shipment.QRCodeID, shipment.TransportUnitID, shipment.LastUpdatedAt, shipment.CreatedBy, shipment.CreatedAt, shipment.UpdatedAt)
+	`, shipment.ID, shipment.ShipmentNumber, shipment.ClientID, shipment.ClientName, shipment.ClientEmail, shipment.FromStation, shipment.ToStation, shipment.CurrentStation, shipment.NextStation, routeJSON, shipment.Status, shipment.ShipmentStatus, shipment.PaymentStatus, shipment.DepartureDate, shipment.Weight, shipment.Dimensions, shipment.Description, shipment.Value, shipment.Cost, shipment.BaseTariff, shipment.FirstMileTariff, shipment.LastMileTariff, shipment.TotalTariff, shipment.DeliveryMode, shipment.QuantityPlaces, pickupDetailsJSON, dropoffDetailsJSON, shipment.ReceiverName, shipment.ReceiverPhone, shipment.TrainTime, shipment.TrackingCode, shipment.QRCodeID, shipment.TransportUnitID, shipment.LastUpdatedAt, shipment.CreatedBy, shipment.CreatedAt, shipment.UpdatedAt)
 	return shipment, err
 }
 
@@ -513,6 +517,8 @@ func (r *Repository) ListShipmentsByOriginStation(ctx context.Context, station s
 
 func (r *Repository) UpdateShipment(ctx context.Context, shipment model.Shipment) (model.Shipment, error) {
 	routeJSON, _ := json.Marshal(shipment.Route)
+	pickupDetailsJSON, _ := json.Marshal(shipment.PickupDetails)
+	dropoffDetailsJSON, _ := json.Marshal(shipment.DropoffDetails)
 	_, err := r.pool.Exec(ctx, `
 		UPDATE shipments SET
 			shipment_number = $2,
@@ -533,19 +539,84 @@ func (r *Repository) UpdateShipment(ctx context.Context, shipment model.Shipment
 			description = $17,
 			value = $18,
 			cost = $19,
-			quantity_places = $20,
-			receiver_name = $21,
-			receiver_phone = $22,
-			train_time = $23,
-			tracking_code = $24,
-			qr_code_id = $25,
-			transport_unit_id = $26,
-			last_updated_at = $27,
-			created_by = $28,
-			updated_at = $29
+			base_tariff = $20,
+			first_mile_tariff = $21,
+			last_mile_tariff = $22,
+			total_tariff = $23,
+			delivery_mode = $24,
+			quantity_places = $25,
+			pickup_details = $26,
+			dropoff_details = $27,
+			receiver_name = $28,
+			receiver_phone = $29,
+			train_time = $30,
+			tracking_code = $31,
+			qr_code_id = $32,
+			transport_unit_id = $33,
+			last_updated_at = $34,
+			created_by = $35,
+			updated_at = $36
 		WHERE id = $1
-	`, shipment.ID, shipment.ShipmentNumber, shipment.ClientID, shipment.ClientName, shipment.ClientEmail, shipment.FromStation, shipment.ToStation, shipment.CurrentStation, shipment.NextStation, routeJSON, shipment.Status, shipment.ShipmentStatus, shipment.PaymentStatus, shipment.DepartureDate, shipment.Weight, shipment.Dimensions, shipment.Description, shipment.Value, shipment.Cost, shipment.QuantityPlaces, shipment.ReceiverName, shipment.ReceiverPhone, shipment.TrainTime, shipment.TrackingCode, shipment.QRCodeID, shipment.TransportUnitID, shipment.LastUpdatedAt, shipment.CreatedBy, shipment.UpdatedAt)
+	`, shipment.ID, shipment.ShipmentNumber, shipment.ClientID, shipment.ClientName, shipment.ClientEmail, shipment.FromStation, shipment.ToStation, shipment.CurrentStation, shipment.NextStation, routeJSON, shipment.Status, shipment.ShipmentStatus, shipment.PaymentStatus, shipment.DepartureDate, shipment.Weight, shipment.Dimensions, shipment.Description, shipment.Value, shipment.Cost, shipment.BaseTariff, shipment.FirstMileTariff, shipment.LastMileTariff, shipment.TotalTariff, shipment.DeliveryMode, shipment.QuantityPlaces, pickupDetailsJSON, dropoffDetailsJSON, shipment.ReceiverName, shipment.ReceiverPhone, shipment.TrainTime, shipment.TrackingCode, shipment.QRCodeID, shipment.TransportUnitID, shipment.LastUpdatedAt, shipment.CreatedBy, shipment.UpdatedAt)
 	return shipment, err
+}
+
+func (r *Repository) CreateExternalDeliveryOrder(ctx context.Context, order model.ExternalDeliveryOrder) (model.ExternalDeliveryOrder, error) {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO external_delivery_orders (
+			id, shipment_id, provider, status, external_order_id, quoted_price, final_price, currency, tracking_url,
+			idempotency_key, request_payload, response_payload, last_error, created_at, updated_at
+		) VALUES (
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,
+			$10,$11,$12,$13,$14,$15
+		)
+	`, order.ID, order.ShipmentID, order.Provider, order.Status, order.ExternalOrderID, order.QuotedPrice, order.FinalPrice, order.Currency, order.TrackingURL, order.IdempotencyKey, order.RequestPayload, order.ResponsePayload, order.LastError, order.CreatedAt, order.UpdatedAt)
+	return order, err
+}
+
+func (r *Repository) UpdateExternalDeliveryOrder(ctx context.Context, order model.ExternalDeliveryOrder) (model.ExternalDeliveryOrder, error) {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE external_delivery_orders
+		SET
+			status = $2,
+			external_order_id = $3,
+			quoted_price = $4,
+			final_price = $5,
+			currency = $6,
+			tracking_url = $7,
+			idempotency_key = $8,
+			request_payload = $9,
+			response_payload = $10,
+			last_error = $11,
+			updated_at = $12
+		WHERE id = $1
+	`, order.ID, order.Status, order.ExternalOrderID, order.QuotedPrice, order.FinalPrice, order.Currency, order.TrackingURL, order.IdempotencyKey, order.RequestPayload, order.ResponsePayload, order.LastError, order.UpdatedAt)
+	return order, err
+}
+
+func (r *Repository) GetExternalDeliveryOrderByID(ctx context.Context, id string) (model.ExternalDeliveryOrder, error) {
+	return scanExternalDeliveryOrder(r.pool.QueryRow(ctx, externalDeliveryOrderSelect+` WHERE id = $1`, id))
+}
+
+func (r *Repository) GetExternalDeliveryOrderByExternalID(ctx context.Context, provider model.ExternalDeliveryProvider, externalOrderID string) (model.ExternalDeliveryOrder, error) {
+	return scanExternalDeliveryOrder(r.pool.QueryRow(ctx, externalDeliveryOrderSelect+` WHERE provider = $1 AND external_order_id = $2 ORDER BY created_at DESC LIMIT 1`, provider, externalOrderID))
+}
+
+func (r *Repository) ListExternalDeliveryOrdersByShipment(ctx context.Context, shipmentID string) ([]model.ExternalDeliveryOrder, error) {
+	rows, err := r.pool.Query(ctx, externalDeliveryOrderSelect+` WHERE shipment_id = $1 ORDER BY created_at DESC`, shipmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []model.ExternalDeliveryOrder
+	for rows.Next() {
+		item, err := scanExternalDeliveryOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (r *Repository) AddShipmentHistory(ctx context.Context, history model.ShipmentHistory) error {
@@ -803,7 +874,8 @@ func (r *Repository) GetStatusSummary(ctx context.Context) ([]model.StatusSummar
 }
 
 const userSelect = `SELECT id, name, email, password_hash, role, company, deposit_balance, contract_number, phone, station, is_active, created_at FROM users`
-const shipmentSelect = `SELECT id, shipment_number, client_id, client_name, client_email, from_station, to_station, current_station, next_station, route, status, shipment_status, payment_status, departure_date, weight, dimensions, description, value, cost, quantity_places, receiver_name, receiver_phone, train_time, tracking_code, qr_code_id, transport_unit_id, last_updated_at, created_by, created_at, updated_at FROM shipments`
+const shipmentSelect = `SELECT id, shipment_number, client_id, client_name, client_email, from_station, to_station, current_station, next_station, route, status, shipment_status, payment_status, departure_date, weight, dimensions, description, value, cost, base_tariff, first_mile_tariff, last_mile_tariff, total_tariff, delivery_mode, quantity_places, pickup_details, dropoff_details, receiver_name, receiver_phone, train_time, tracking_code, qr_code_id, transport_unit_id, last_updated_at, created_by, created_at, updated_at FROM shipments`
+const externalDeliveryOrderSelect = `SELECT id, shipment_id, provider, status, external_order_id, quoted_price, final_price, currency, tracking_url, idempotency_key, request_payload, response_payload, last_error, created_at, updated_at FROM external_delivery_orders`
 
 func scanUser(row pgx.Row) (model.User, error) {
 	var user model.User
@@ -829,7 +901,9 @@ func collectUsers(rows pgx.Rows) ([]model.User, error) {
 func scanShipment(row pgx.Row) (model.Shipment, error) {
 	var shipment model.Shipment
 	var routeRaw []byte
-	err := row.Scan(&shipment.ID, &shipment.ShipmentNumber, &shipment.ClientID, &shipment.ClientName, &shipment.ClientEmail, &shipment.FromStation, &shipment.ToStation, &shipment.CurrentStation, &shipment.NextStation, &routeRaw, &shipment.Status, &shipment.ShipmentStatus, &shipment.PaymentStatus, &shipment.DepartureDate, &shipment.Weight, &shipment.Dimensions, &shipment.Description, &shipment.Value, &shipment.Cost, &shipment.QuantityPlaces, &shipment.ReceiverName, &shipment.ReceiverPhone, &shipment.TrainTime, &shipment.TrackingCode, &shipment.QRCodeID, &shipment.TransportUnitID, &shipment.LastUpdatedAt, &shipment.CreatedBy, &shipment.CreatedAt, &shipment.UpdatedAt)
+	var pickupDetailsRaw []byte
+	var dropoffDetailsRaw []byte
+	err := row.Scan(&shipment.ID, &shipment.ShipmentNumber, &shipment.ClientID, &shipment.ClientName, &shipment.ClientEmail, &shipment.FromStation, &shipment.ToStation, &shipment.CurrentStation, &shipment.NextStation, &routeRaw, &shipment.Status, &shipment.ShipmentStatus, &shipment.PaymentStatus, &shipment.DepartureDate, &shipment.Weight, &shipment.Dimensions, &shipment.Description, &shipment.Value, &shipment.Cost, &shipment.BaseTariff, &shipment.FirstMileTariff, &shipment.LastMileTariff, &shipment.TotalTariff, &shipment.DeliveryMode, &shipment.QuantityPlaces, &pickupDetailsRaw, &dropoffDetailsRaw, &shipment.ReceiverName, &shipment.ReceiverPhone, &shipment.TrainTime, &shipment.TrackingCode, &shipment.QRCodeID, &shipment.TransportUnitID, &shipment.LastUpdatedAt, &shipment.CreatedBy, &shipment.CreatedAt, &shipment.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Shipment{}, service.ErrNotFound
 	}
@@ -837,6 +911,12 @@ func scanShipment(row pgx.Row) (model.Shipment, error) {
 		return model.Shipment{}, err
 	}
 	_ = json.Unmarshal(routeRaw, &shipment.Route)
+	if len(pickupDetailsRaw) > 0 && string(pickupDetailsRaw) != "null" {
+		_ = json.Unmarshal(pickupDetailsRaw, &shipment.PickupDetails)
+	}
+	if len(dropoffDetailsRaw) > 0 && string(dropoffDetailsRaw) != "null" {
+		_ = json.Unmarshal(dropoffDetailsRaw, &shipment.DropoffDetails)
+	}
 	return shipment, nil
 }
 
@@ -845,10 +925,18 @@ func collectShipments(rows pgx.Rows) ([]model.Shipment, error) {
 	for rows.Next() {
 		var shipment model.Shipment
 		var routeRaw []byte
-		if err := rows.Scan(&shipment.ID, &shipment.ShipmentNumber, &shipment.ClientID, &shipment.ClientName, &shipment.ClientEmail, &shipment.FromStation, &shipment.ToStation, &shipment.CurrentStation, &shipment.NextStation, &routeRaw, &shipment.Status, &shipment.ShipmentStatus, &shipment.PaymentStatus, &shipment.DepartureDate, &shipment.Weight, &shipment.Dimensions, &shipment.Description, &shipment.Value, &shipment.Cost, &shipment.QuantityPlaces, &shipment.ReceiverName, &shipment.ReceiverPhone, &shipment.TrainTime, &shipment.TrackingCode, &shipment.QRCodeID, &shipment.TransportUnitID, &shipment.LastUpdatedAt, &shipment.CreatedBy, &shipment.CreatedAt, &shipment.UpdatedAt); err != nil {
+		var pickupDetailsRaw []byte
+		var dropoffDetailsRaw []byte
+		if err := rows.Scan(&shipment.ID, &shipment.ShipmentNumber, &shipment.ClientID, &shipment.ClientName, &shipment.ClientEmail, &shipment.FromStation, &shipment.ToStation, &shipment.CurrentStation, &shipment.NextStation, &routeRaw, &shipment.Status, &shipment.ShipmentStatus, &shipment.PaymentStatus, &shipment.DepartureDate, &shipment.Weight, &shipment.Dimensions, &shipment.Description, &shipment.Value, &shipment.Cost, &shipment.BaseTariff, &shipment.FirstMileTariff, &shipment.LastMileTariff, &shipment.TotalTariff, &shipment.DeliveryMode, &shipment.QuantityPlaces, &pickupDetailsRaw, &dropoffDetailsRaw, &shipment.ReceiverName, &shipment.ReceiverPhone, &shipment.TrainTime, &shipment.TrackingCode, &shipment.QRCodeID, &shipment.TransportUnitID, &shipment.LastUpdatedAt, &shipment.CreatedBy, &shipment.CreatedAt, &shipment.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(routeRaw, &shipment.Route)
+		if len(pickupDetailsRaw) > 0 && string(pickupDetailsRaw) != "null" {
+			_ = json.Unmarshal(pickupDetailsRaw, &shipment.PickupDetails)
+		}
+		if len(dropoffDetailsRaw) > 0 && string(dropoffDetailsRaw) != "null" {
+			_ = json.Unmarshal(dropoffDetailsRaw, &shipment.DropoffDetails)
+		}
 		items = append(items, shipment)
 	}
 	return items, rows.Err()
@@ -857,4 +945,13 @@ func collectShipments(rows pgx.Rows) ([]model.Shipment, error) {
 func startOfMonth() time.Time {
 	now := time.Now().UTC()
 	return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+}
+
+func scanExternalDeliveryOrder(row interface{ Scan(dest ...any) error }) (model.ExternalDeliveryOrder, error) {
+	var item model.ExternalDeliveryOrder
+	err := row.Scan(&item.ID, &item.ShipmentID, &item.Provider, &item.Status, &item.ExternalOrderID, &item.QuotedPrice, &item.FinalPrice, &item.Currency, &item.TrackingURL, &item.IdempotencyKey, &item.RequestPayload, &item.ResponsePayload, &item.LastError, &item.CreatedAt, &item.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.ExternalDeliveryOrder{}, service.ErrNotFound
+	}
+	return item, err
 }

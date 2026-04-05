@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 
+	"cargo/backend/internal/model"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -26,6 +28,14 @@ func (s *Server) handleTrackShipment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleScanShipment(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleOperator, model.RoleLoading, model.RoleTransit, model.RoleReceiver, model.RoleIssue, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct {
 		ShipmentID      string  `json:"shipment_id"`
 		EventType       string  `json:"event_type"`
@@ -36,6 +46,15 @@ func (s *Server) handleScanShipment(w http.ResponseWriter, r *http.Request) {
 	}
 	if !decodeJSON(w, r, &req) {
 		return
+	}
+	if req.UserID == nil {
+		req.UserID = &user.ID
+	}
+	if req.StationID != nil {
+		if err := s.requireStation(user, *req.StationID); err != nil {
+			handleServiceError(w, err)
+			return
+		}
 	}
 	event, err := s.services.Tracking.Scan(r.Context(), req.ShipmentID, req.EventType, req.StationID, req.TransportUnitID, req.UserID, req.Comment)
 	if err != nil {

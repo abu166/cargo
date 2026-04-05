@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 
+	"cargo/backend/internal/model"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -14,6 +16,14 @@ func (s *Server) mountPaymentRoutes(r chi.Router) {
 }
 
 func (s *Server) handleCreatePayment(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
+	}
+	if err := s.requireRole(user, model.RoleOperator, model.RoleManager, model.RoleAdmin); err != nil {
+		handleServiceError(w, err)
+		return
+	}
 	var req struct {
 		ShipmentID   string  `json:"shipment_id"`
 		Amount       float64 `json:"amount"`
@@ -21,6 +31,15 @@ func (s *Server) handleCreatePayment(w http.ResponseWriter, r *http.Request) {
 		POSReference *string `json:"pos_terminal_reference"`
 	}
 	if !decodeJSON(w, r, &req) {
+		return
+	}
+	shipment, err := s.services.Shipments.Get(r.Context(), req.ShipmentID)
+	if err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	if err := s.requireStation(user, shipment.FromStation); err != nil {
+		handleServiceError(w, err)
 		return
 	}
 	payment, err := s.services.Payments.Create(r.Context(), req.ShipmentID, req.Amount, req.Method, req.POSReference)
@@ -41,12 +60,29 @@ func (s *Server) handleGetPayment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConfirmPayment(w http.ResponseWriter, r *http.Request) {
-	user := s.authenticatedUser(r)
-	confirmedBy := "system"
-	if user != nil {
-		confirmedBy = user.ID
+	user, ok := s.mustAuth(w, r)
+	if !ok {
+		return
 	}
-	payment, shipment, err := s.services.Payments.Confirm(r.Context(), chi.URLParam(r, "id"), confirmedBy)
+	if err := s.requireRole(user, model.RoleAccounting, model.RoleManager, model.RoleAdmin, model.RoleOperator); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	payment, err := s.services.Payments.Get(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	shipment, err := s.services.Shipments.Get(r.Context(), payment.ShipmentID)
+	if err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	if err := s.requireStation(user, shipment.FromStation); err != nil {
+		handleServiceError(w, err)
+		return
+	}
+	payment, shipment, err = s.services.Payments.Confirm(r.Context(), chi.URLParam(r, "id"), user.ID)
 	if err != nil {
 		handleServiceError(w, err)
 		return
